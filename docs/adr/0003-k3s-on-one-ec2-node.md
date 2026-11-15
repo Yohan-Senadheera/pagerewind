@@ -1,6 +1,6 @@
 # 3. Reference deployment: k3s on one EC2 node
 
-- Status: accepted
+- Status: superseded by [0004](0004-two-free-plan-nodes.md)
 - Date: 2026-11-14
 
 ## Context
