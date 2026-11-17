@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: ingest
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: pagerewind
+    password: pagerewind
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8081
+  shutdown: graceful
+
+pagerewind:
+  ingest:
+    duplicate-window: 5m
+    publish-timeout: 5s
+    sources:
+      alertmanager:
+        token: ${INGEST_ALERTMANAGER_TOKEN:}
+        hmac-secret: ${INGEST_ALERTMANAGER_HMAC_SECRET:}
+      generic:
+        token: ${INGEST_GENERIC_TOKEN:}
+        hmac-secret: ${INGEST_GENERIC_HMAC_SECRET:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: ecs

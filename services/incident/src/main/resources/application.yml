@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: incident
+  datasource:
+    url: jdbc:postgresql://localhost:5432/pagerewind
+    username: pagerewind
+    password: pagerewind
+    hikari:
+      schema: incident
+      maximum-pool-size: 10
+  flyway:
+    schemas: incident
+    default-schema: incident
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: pagerewind
+    password: pagerewind
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        concurrency: 4
+        max-concurrency: 8
+        prefetch: 20
+        default-requeue-rejected: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8082
+  shutdown: graceful
+
+pagerewind:
+  incident:
+    alerts-queue: incident.alerts
+    delivery-limit: 4
+    outbox-batch-size: 50
+    outbox-poll-interval-ms: 500
+    publish-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: ecs

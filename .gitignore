@@ -23,6 +23,19 @@
 hs_err_pid*
 replay_pid*
 
+# Maven
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
 # Terraform
 .terraform/
 *.tfvars
