@@ -44,6 +44,14 @@ function Assert-Success([string]$What) {
     if ($LASTEXITCODE -ne 0) { throw "$What failed (exit code $LASTEXITCODE)" }
 }
 
+# Runs a native command and reports success. Its stderr is discarded; in Windows PowerShell 5.1 any
+# stderr line would otherwise become a terminating error under $ErrorActionPreference = 'Stop'.
+function Test-NativeCommand([scriptblock]$Command) {
+    $ErrorActionPreference = 'Continue'
+    & $Command 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Write-Step([string]$Text) {
     Write-Host ""
     Write-Host "==> $Text" -ForegroundColor Cyan
@@ -59,8 +67,9 @@ function Assert-Prerequisites {
     if (-not (Test-Path "$SshKey.pub")) {
         throw "SSH key $SshKey.pub is missing. Create it with: ssh-keygen -t ed25519 -f `"$SshKey`""
     }
-    aws sts get-caller-identity --profile $AwsProfile *> $null
-    if ($LASTEXITCODE -ne 0) { throw "AWS login has expired. Run: aws login --profile $AwsProfile" }
+    if (-not (Test-NativeCommand { aws sts get-caller-identity --profile $AwsProfile })) {
+        throw "AWS login has expired. Run: aws login --profile $AwsProfile"
+    }
 }
 
 function Invoke-Terraform([string]$Stack, [string[]]$Arguments) {
@@ -92,6 +101,7 @@ function Get-InstanceIds {
 }
 
 function Invoke-Ssh([string]$Ip, [string]$RemoteCommand) {
+    $ErrorActionPreference = 'Continue'
     ssh -i $SshKey -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$KnownHosts" `
         -o ConnectTimeout=5 -o BatchMode=yes "ubuntu@$Ip" $RemoteCommand 2>$null
 }
@@ -119,8 +129,9 @@ function Save-Kubeconfig([string]$Ip) {
 
 function Install-ArgoCd {
     Write-Step "Installing Argo CD (chart $ArgoChartVersion) and the root application"
-    helm repo add argo https://argoproj.github.io/argo-helm --force-update *> $null
-    Assert-Success 'helm repo add'
+    if (-not (Test-NativeCommand { helm repo add argo https://argoproj.github.io/argo-helm --force-update })) {
+        throw 'helm repo add failed'
+    }
     helm upgrade --install argocd argo/argo-cd --version $ArgoChartVersion --namespace argocd --create-namespace `
         --values (Join-Path $Root 'platform\argocd-values.yaml') --wait --timeout 10m
     Assert-Success 'helm install argocd'

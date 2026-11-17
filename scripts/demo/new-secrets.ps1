@@ -19,12 +19,11 @@ function New-RandomValue {
     return ([BitConverter]::ToString($bytes) -replace '-', '').ToLower()
 }
 
-kubectl get namespace $namespace *> $null
-if ($LASTEXITCODE -ne 0) {
+# --ignore-not-found prints nothing instead of an error, which Windows PowerShell 5.1 would treat as fatal.
+if (-not (kubectl get namespace $namespace --ignore-not-found -o name)) {
     kubectl create namespace $namespace | Out-Null
 }
-kubectl -n $namespace get secret $name *> $null
-if ($LASTEXITCODE -eq 0) {
+if (kubectl -n $namespace get secret $name --ignore-not-found -o name) {
     if (-not $Replace) { Write-Host "Secret $name already exists. Use -Replace to rotate it."; return }
     kubectl -n $namespace delete secret $name | Out-Null
 }
