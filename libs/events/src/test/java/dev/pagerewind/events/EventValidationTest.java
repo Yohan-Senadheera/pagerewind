@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -59,10 +60,32 @@ class EventValidationTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    private static PageRequested page(int step, int round, List<Contact> contacts) {
+        return new PageRequested(UUID.randomUUID(), NOW, 1, UUID.randomUUID(), step, round, "alice", "Alice",
+                contacts, "api", Severity.CRITICAL, "down");
+    }
+
     @Test
-    void pageStepMustBePositive() {
-        assertThatThrownBy(() -> new PageRequested(UUID.randomUUID(), NOW, 1, UUID.randomUUID(), 0, "user:a"))
-                .isInstanceOf(IllegalArgumentException.class);
+    void pageStepAndRoundMustBePositive() {
+        assertThatThrownBy(() -> page(0, 1, List.of())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> page(1, 0, List.of())).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void pageContactsAreCopiedAndNullBecomesEmpty() {
+        List<Contact> contacts = new java.util.ArrayList<>(List.of(new Contact(Contact.Channel.TELEGRAM, "123")));
+        PageRequested page = page(1, 1, contacts);
+        contacts.clear();
+
+        assertThat(page.contacts()).hasSize(1);
+        assertThat(page(1, 1, null).contacts()).isEmpty();
+        assertThatThrownBy(() -> page.contacts().add(null)).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void contactNeedsChannelAndAddress() {
+        assertThatNullPointerException().isThrownBy(() -> new Contact(null, "x"));
+        assertThatThrownBy(() -> new Contact(Contact.Channel.EMAIL, " ")).isInstanceOf(IllegalArgumentException.class);
     }
 
     @ParameterizedTest

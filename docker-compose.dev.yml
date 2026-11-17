@@ -1,6 +1,7 @@
 # Dependencies for running the services locally (not for production).
 #   docker compose -f docker-compose.dev.yml up -d
 # RabbitMQ management UI: http://localhost:15672 (pagerewind / pagerewind)
+# Mailpit (catches all email sent by notify): http://localhost:8025
 name: pagerewind-dev
 
 services:
@@ -35,6 +36,13 @@ services:
       timeout: 5s
       retries: 10
     mem_limit: 512m
+
+  mailpit:
+    image: axllent/mailpit:v1.20.0
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    mem_limit: 64m
 
   redis:
     image: redis:7.4-alpine

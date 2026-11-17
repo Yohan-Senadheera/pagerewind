@@ -30,14 +30,23 @@ spring:
 server:
   port: 8082
   shutdown: graceful
+  servlet:
+    session:
+      # Never put the session id in URLs, where it leaks through history, logs and Referer headers.
+      tracking-modes: cookie
+      cookie:
+        http-only: true
+        same-site: lax
 
 pagerewind:
   incident:
     alerts-queue: incident.alerts
     delivery-limit: 4
-    outbox-batch-size: 50
-    outbox-poll-interval-ms: 500
+  messaging:
     publish-timeout: 5s
+    outbox:
+      batch-size: 50
+      poll-interval-ms: 500
 
 management:
   endpoints:

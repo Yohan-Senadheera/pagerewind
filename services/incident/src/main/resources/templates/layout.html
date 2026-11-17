@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' · PageRewind'">PageRewind</title>
+    <style>
+        :root { --fg: #1c2330; --muted: #5d6675; --line: #dde2e8; --bg: #fff; --panel: #f6f8fa; --accent: #2457c5;
+                --crit: #b42318; --warn: #b26a00; --info: #2457c5; --ok: #1f7a45; }
+        @media (prefers-color-scheme: dark) {
+            :root { --fg: #e5e9ef; --muted: #9aa4b2; --line: #2c3340; --bg: #11151b; --panel: #181d25; --accent: #7aa2ff;
+                    --crit: #f97066; --warn: #f0a63a; --info: #7aa2ff; --ok: #4cc38a; }
+        }
+        body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+        header { border-bottom: 1px solid var(--line); padding: .75rem 1rem; display: flex; gap: 1.5rem; align-items: center; }
+        header a { color: var(--fg); text-decoration: none; } header strong { font-size: 1.05rem; }
+        main { max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem; }
+        a { color: var(--accent); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+        th { color: var(--muted); font-weight: 500; font-size: .85rem; }
+        .pill { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .8rem; font-weight: 600; border: 1px solid currentColor; }
+        .CRITICAL { color: var(--crit); } .WARNING { color: var(--warn); } .INFO { color: var(--info); }
+        .TRIGGERED { color: var(--crit); } .ACKNOWLEDGED { color: var(--warn); } .RESOLVED { color: var(--ok); }
+        .flash { padding: .6rem .9rem; border-radius: .4rem; background: var(--panel); border-left: 4px solid var(--ok); margin-bottom: 1rem; }
+        .flash.error { border-left-color: var(--crit); }
+        button { font: inherit; padding: .45rem .9rem; border-radius: .35rem; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+        button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .muted { color: var(--muted); } code { font-size: .85em; }
+        .actions { display: flex; gap: .5rem; margin: 1rem 0; }
+        .table-wrap { overflow-x: auto; }
+    </style>
+</head>
+<body>
+<header th:fragment="nav">
+    <a href="/ui"><strong>PageRewind</strong></a>
+    <a href="/ui">Open incidents</a>
+    <a href="/ui?show=all">All incidents</a>
+</header>
+</body>
+</html>

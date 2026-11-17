@@ -1,8 +1,8 @@
-package dev.pagerewind.incident;
+package dev.pagerewind.messaging;
 
 import dev.pagerewind.events.Messaging;
-import dev.pagerewind.incident.OutboxRepository.OutboxMessage;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -11,21 +11,20 @@ import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.stereotype.Component;
 
 /**
- * Publishes with publisher confirms. Incident events are broadcast: if no service listens for an
- * event type yet, the broker drops it, and that is not an error.
+ * Publishes with publisher confirms (needs {@code spring.rabbitmq.publisher-confirm-type=correlated}).
+ * Events are broadcast: if no service listens for an event type yet, the broker drops it, and that
+ * is not an error.
  */
-@Component
 public class RabbitMessagePublisher implements MessagePublisher {
 
     private final RabbitTemplate rabbit;
-    private final IncidentProperties properties;
+    private final Duration timeout;
 
-    public RabbitMessagePublisher(RabbitTemplate rabbit, IncidentProperties properties) {
+    public RabbitMessagePublisher(RabbitTemplate rabbit, Duration timeout) {
         this.rabbit = rabbit;
-        this.properties = properties;
+        this.timeout = timeout;
     }
 
     @Override
@@ -40,8 +39,7 @@ public class RabbitMessagePublisher implements MessagePublisher {
         CorrelationData correlation = new CorrelationData(outboxMessage.eventId().toString());
         rabbit.send(Messaging.EVENTS_EXCHANGE, outboxMessage.routingKey(), message, correlation);
         try {
-            CorrelationData.Confirm confirm = correlation.getFuture()
-                    .get(properties.publishTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            CorrelationData.Confirm confirm = correlation.getFuture().get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!confirm.ack()) {
                 throw new IllegalStateException("Broker refused event " + outboxMessage.eventId() + ": " + confirm.reason());
             }

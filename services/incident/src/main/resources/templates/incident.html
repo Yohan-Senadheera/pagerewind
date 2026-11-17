@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Incident')}"></head>
+<body>
+<header th:replace="~{layout :: nav}"></header>
+<main th:with="i=${incident}">
+    <div class="flash" th:if="${message}" th:text="${message}">Done.</div>
+    <div class="flash error" th:if="${error}" th:text="${error}">Error.</div>
+
+    <h1 th:text="${i.summary()}">Summary</h1>
+    <p>
+        <span class="pill" th:classappend="${i.status().name()}" th:text="${i.status()}">TRIGGERED</span>
+        <span class="pill" th:classappend="${i.severity().name()}" th:text="${i.severity()}">CRITICAL</span>
+        <span th:text="${i.service()}">service</span>
+        · <span class="muted" th:text="${i.alertCount()} + ' alerts'">1 alerts</span>
+    </p>
+    <p class="muted">Incident <code th:text="${i.id()}">id</code> · opened <time th:text="${i.createdAt()}">time</time></p>
+
+    <div class="actions" th:if="${i.status().isOpen()}">
+        <form th:if="${i.status().name() == 'TRIGGERED'}" method="post" th:action="@{/ui/incidents/{id}/acknowledge(id=${i.id()})}">
+            <button class="primary" type="submit">Acknowledge</button>
+        </form>
+        <form method="post" th:action="@{/ui/incidents/{id}/resolve(id=${i.id()})}">
+            <button type="submit">Resolve</button>
+        </form>
+    </div>
+
+    <h2>Timeline</h2>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Time</th><th>Event</th><th>By</th><th>Details</th></tr></thead>
+            <tbody>
+            <tr th:each="e : ${timeline}">
+                <td class="muted"><time th:text="${e.occurredAt()}">time</time></td>
+                <td th:text="${e.type()}">ALERT</td>
+                <td th:text="${e.actor()}">actor</td>
+                <td>
+                    <span th:text="${e.message()}">message</span>
+                    <span class="muted" th:if="${e.data().get('note') != null}" th:text="' — ' + ${e.data().get('note')}">note</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

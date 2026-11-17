@@ -1,14 +1,16 @@
-package dev.pagerewind.incident;
+package dev.pagerewind.messaging;
 
 import dev.pagerewind.events.PageRewindEvent;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
 import tools.jackson.databind.json.JsonMapper;
 
-@Repository
+/**
+ * The {@code outbox} table. Each service creates the table in its own schema (see the incident
+ * service migration for the shape).
+ */
 public class OutboxRepository {
 
     private static final int MAX_ERROR_LENGTH = 1000;
@@ -73,8 +75,5 @@ public class OutboxRepository {
 
     public long countUnpublished() {
         return jdbc.sql("SELECT count(*) FROM outbox WHERE published_at IS NULL").query(Long.class).single();
-    }
-
-    public record OutboxMessage(long id, UUID eventId, String eventType, String routingKey, String payload) {
     }
 }

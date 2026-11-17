@@ -1,11 +1,10 @@
-package dev.pagerewind.incident;
+package dev.pagerewind.messaging;
 
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
 
-@Repository
+/** The {@code processed_event} table that makes consumers idempotent. */
 public class ProcessedEventRepository {
 
     private final JdbcClient jdbc;

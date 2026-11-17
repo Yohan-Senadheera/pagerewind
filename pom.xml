@@ -27,8 +27,12 @@
 
     <modules>
         <module>libs/events</module>
+        <module>libs/messaging</module>
         <module>services/ingest</module>
         <module>services/incident</module>
+        <module>services/schedule</module>
+        <module>services/notify</module>
+        <module>services/status</module>
     </modules>
 
     <properties>
@@ -41,6 +45,11 @@
             <dependency>
                 <groupId>dev.pagerewind</groupId>
                 <artifactId>events</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.pagerewind</groupId>
+                <artifactId>messaging</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
