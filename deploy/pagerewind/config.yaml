@@ -1,0 +1,12 @@
+# Settings shared by every service. Passwords and tokens are in the Secret "pagerewind-secrets",
+# which is created outside Git (scripts/demo/new-secrets.ps1) until External Secrets is added.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pagerewind-config
+data:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pagerewind
+  SPRING_DATASOURCE_USERNAME: pagerewind
+  SPRING_RABBITMQ_HOST: rabbitmq
+  SPRING_RABBITMQ_USERNAME: pagerewind
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs

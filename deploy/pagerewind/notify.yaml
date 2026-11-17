@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: notify
+spec:
+  selector:
+    app: notify
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notify
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notify
+  template:
+    metadata:
+      labels:
+        app: notify
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: notify
+          image: ghcr.io/yohan-senadheera/pagerewind-notify:0.1.0
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: pagerewind-config
+          env:
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: postgres-password
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: rabbitmq-password
+            - name: INCIDENT_BASE_URL
+              value: "http://incident"
+            - name: NOTIFY_PUBLIC_BASE_URL
+              value: "https://notify.pagerewind.dev"
+            - name: NOTIFY_EMAIL_FROM
+              value: "pagerewind@pagerewind.dev"
+            - name: SPRING_MAIL_HOST
+              value: "mailpit"
+            - name: SPRING_MAIL_PORT
+              value: "1025"
+            - name: NOTIFY_ACTION_LINK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: action-link-secret
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: telegram-bot-token
+            - name: TELEGRAM_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: telegram-webhook-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 320Mi
+            limits:
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 15
+            failureThreshold: 4
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

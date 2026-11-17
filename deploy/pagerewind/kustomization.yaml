@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pagerewind
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: pagerewind
+resources:
+  - config.yaml
+  - postgres.yaml
+  - rabbitmq.yaml
+  - redis.yaml
+  - mailpit.yaml
+  - ingest.yaml
+  - incident.yaml
+  - schedule.yaml
+  - notify.yaml
+  - status.yaml
+  - ingress.yaml
