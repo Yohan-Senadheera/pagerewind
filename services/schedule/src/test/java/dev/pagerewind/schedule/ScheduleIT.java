@@ -320,6 +320,18 @@ class ScheduleIT {
     }
 
     @Test
+    void overviewPageShowsWhoIsOnCallAndEscapesNames() {
+        put("/v1/people/eve", "{\"name\":\"<img src=x onerror=alert(1)>\",\"contacts\":[]}", 200);
+        put("/v1/teams/ops", "{\"name\":\"Ops <b>team</b>\",\"services\":[\"checkout\"]}", 200);
+
+        String page = get("/ui", 200);
+
+        assertThat(page).contains("Who is on call").contains("Primary").contains(">alice<").contains("alice, carol")
+                .contains("Services: checkout").contains("On call in primary, then wait 2 min")
+                .contains("Ops &lt;b&gt;team&lt;/b&gt;").doesNotContain("<b>team</b>").doesNotContain("<img src=x");
+    }
+
+    @Test
     void onlyOneDefaultTeam() {
         put("/v1/teams/a", "{\"name\":\"A\",\"defaultTeam\":true}", 200);
         put("/v1/teams/b", "{\"name\":\"B\",\"defaultTeam\":true}", 200);

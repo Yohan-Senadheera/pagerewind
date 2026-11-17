@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: status
+  datasource:
+    url: jdbc:postgresql://localhost:5432/pagerewind
+    username: pagerewind
+    password: pagerewind
+    hikari:
+      schema: status
+      maximum-pool-size: 5
+  flyway:
+    schemas: status
+    default-schema: status
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: pagerewind
+    password: pagerewind
+    listener:
+      simple:
+        concurrency: 1
+        max-concurrency: 2
+        prefetch: 20
+        default-requeue-rejected: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8085
+  shutdown: graceful
+
+pagerewind:
+  status:
+    title: ${STATUS_PAGE_TITLE:System status}
+    services: ${STATUS_SERVICES:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: ecs

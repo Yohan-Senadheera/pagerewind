@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>On call · PageRewind</title>
+    <style>
+        :root { --fg: #1c2330; --muted: #5d6675; --line: #dde2e8; --bg: #fff; --panel: #f6f8fa; --accent: #2457c5; }
+        @media (prefers-color-scheme: dark) {
+            :root { --fg: #e5e9ef; --muted: #9aa4b2; --line: #2c3340; --bg: #11151b; --panel: #181d25; --accent: #7aa2ff; }
+        }
+        body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+        main { max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem; }
+        section { border: 1px solid var(--line); border-radius: .5rem; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+        h2 { margin: 0 0 .25rem; font-size: 1.15rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+        th { color: var(--muted); font-weight: 500; font-size: .85rem; }
+        .muted { color: var(--muted); } .now { font-weight: 600; }
+        .tag { font-size: .75rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 .45rem; margin-left: .35rem; }
+        .table-wrap { overflow-x: auto; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Who is on call</h1>
+    <p th:if="${teams.isEmpty()}" class="muted">No teams yet. Create one with <code>PUT /v1/teams/{id}</code>.</p>
+    <section th:each="t : ${teams}">
+        <h2>
+            <span th:text="${t.team().name()}">Team</span>
+            <span class="tag" th:if="${t.team().defaultTeam()}">default team</span>
+        </h2>
+        <p class="muted" th:text="${t.services().isEmpty()} ? 'No services assigned' : 'Services: ' + ${#strings.listJoin(t.services(), ', ')}">Services</p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Rotation</th><th>On call now</th><th>Until</th><th>Members</th></tr></thead>
+                <tbody>
+                <tr th:each="r : ${t.rotations()}">
+                    <td th:text="${r.rotation().name()}">Primary</td>
+                    <td class="now">
+                        <span th:text="${r.onCallNow() != null} ? ${r.onCallNow().personId()} : 'nobody'">alice</span>
+                        <span class="tag" th:if="${r.onCallNow() != null and r.onCallNow().override()}">override</span>
+                    </td>
+                    <td class="muted" th:text="${r.onCallNow() != null} ? ${r.onCallNow().end()} : ''">time</td>
+                    <td th:text="${#strings.listJoin(r.rotation().members(), ', ')}">alice, bob</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="muted" th:if="${t.policy().isEmpty()}">No escalation policy: incidents for this team page nobody.</p>
+        <ol th:unless="${t.policy().isEmpty()}">
+            <li th:each="s : ${t.policy()}"
+                th:text="${s.targetType().name() == 'ROTATION' ? 'On call in ' : 'Person '} + ${s.targetId()} + ', then wait ' + ${s.escalateAfterMinutes()} + ' min'">step</li>
+        </ol>
+    </section>
+</main>
+</body>
+</html>

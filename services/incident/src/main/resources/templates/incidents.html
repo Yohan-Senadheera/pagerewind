@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Incidents')}"></head>
+<body>
+<header th:replace="~{layout :: nav}"></header>
+<main>
+    <h1 th:text="${show == 'open'} ? 'Open incidents' : 'All incidents'">Open incidents</h1>
+    <p th:if="${incidents.isEmpty()}" class="muted">Nothing here. All quiet.</p>
+    <div class="table-wrap" th:unless="${incidents.isEmpty()}">
+        <table>
+            <thead><tr><th>Status</th><th>Severity</th><th>Service</th><th>Summary</th><th>Alerts</th><th>Opened</th></tr></thead>
+            <tbody>
+            <tr th:each="i : ${incidents}">
+                <td><span class="pill" th:classappend="${i.status().name()}" th:text="${i.status()}">TRIGGERED</span></td>
+                <td><span class="pill" th:classappend="${i.severity().name()}" th:text="${i.severity()}">CRITICAL</span></td>
+                <td th:text="${i.service()}">checkout</td>
+                <td><a th:href="@{/ui/incidents/{id}(id=${i.id()})}" th:text="${i.summary()}">summary</a></td>
+                <td th:text="${i.alertCount()}">1</td>
+                <td class="muted"><time th:datetime="${i.createdAt()}" th:text="${i.createdAt()}">time</time></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>
