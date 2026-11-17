@@ -1,0 +1,79 @@
+spring:
+  application:
+    name: notify
+  datasource:
+    url: jdbc:postgresql://localhost:5432/pagerewind
+    username: pagerewind
+    password: pagerewind
+    hikari:
+      schema: notify
+      maximum-pool-size: 10
+  flyway:
+    schemas: notify
+    default-schema: notify
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: pagerewind
+    password: pagerewind
+    listener:
+      simple:
+        concurrency: 2
+        max-concurrency: 4
+        prefetch: 10
+        default-requeue-rejected: true
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8084
+  shutdown: graceful
+
+pagerewind:
+  notify:
+    pages-queue: notify.pages
+    delivery-limit: 4
+    public-base-url: ${NOTIFY_PUBLIC_BASE_URL:http://localhost:8084}
+    incident-base-url: ${INCIDENT_BASE_URL:http://localhost:8082}
+    rate-limit: 2m
+    retry:
+      max-attempts: 3
+      initial-backoff: 200ms
+      max-backoff: 2s
+    action-links:
+      secret: ${NOTIFY_ACTION_LINK_SECRET:}
+      ttl: 30m
+    telegram:
+      bot-token: ${TELEGRAM_BOT_TOKEN:}
+      webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}
+    email:
+      from: ${NOTIFY_EMAIL_FROM:pagerewind@localhost}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    mail:
+      enabled: false
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: ecs

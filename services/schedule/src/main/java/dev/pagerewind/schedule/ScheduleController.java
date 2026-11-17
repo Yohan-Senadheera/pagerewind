@@ -83,7 +83,7 @@ public class ScheduleController {
 
     // ---- teams
 
-    public record TeamRequest(@NotBlank @Size(max = 200) String name, boolean defaultTeam,
+    public record TeamRequest(@NotBlank @Size(max = 200) String name, Boolean defaultTeam,
             @Size(max = 200) List<@NotBlank @Size(max = 200) String> services) {
     }
 
@@ -97,7 +97,7 @@ public class ScheduleController {
     @Transactional
     public TeamView putTeam(@PathVariable @Pattern(regexp = ID) String id, @Valid @RequestBody TeamRequest request) {
         List<String> services = request.services() == null ? List.of() : request.services().stream().map(String::trim).distinct().toList();
-        directory.saveTeam(id, request.name().trim(), request.defaultTeam(), services);
+        directory.saveTeam(id, request.name().trim(), Boolean.TRUE.equals(request.defaultTeam()), services);
         return team(id);
     }
 
@@ -121,7 +121,7 @@ public class ScheduleController {
     public record RotationRequest(@NotBlank @Size(max = 200) String name,
             @NotEmpty @Size(max = 100) List<@NotBlank String> members,
             @NotNull LocalDateTime start, @NotBlank String timeZone,
-            @Min(1) @Max(672) int shiftHours) {
+            @NotNull @Min(1) @Max(672) Integer shiftHours) {
     }
 
     @PutMapping("/teams/{teamId}/rotations/{id}")
@@ -182,10 +182,10 @@ public class ScheduleController {
 
     // ---- escalation policy
 
-    public record PolicyRequest(@Min(0) @Max(10) int repeat, @NotEmpty @Size(max = 20) List<@Valid StepRequest> steps) {
+    public record PolicyRequest(@Min(0) @Max(10) Integer repeat, @NotEmpty @Size(max = 20) List<@Valid StepRequest> steps) {
     }
 
-    public record StepRequest(@Min(1) @Max(1440) int escalateAfterMinutes, @NotNull EscalationStep.TargetType targetType,
+    public record StepRequest(@NotNull @Min(1) @Max(1440) Integer escalateAfterMinutes, @NotNull EscalationStep.TargetType targetType,
             @NotBlank String targetId) {
     }
 
@@ -206,7 +206,7 @@ public class ScheduleController {
             }
             steps.add(new EscalationStep(i + 1, step.escalateAfterMinutes(), step.targetType(), step.targetId()));
         }
-        directory.savePolicy(teamId, request.repeat(), steps);
+        directory.savePolicy(teamId, request.repeat() == null ? 0 : request.repeat(), steps);
         return directory.steps(teamId);
     }
 
