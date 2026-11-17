@@ -8,7 +8,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.random.RandomGenerator;
+import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,7 +49,9 @@ public class PageService {
         this.properties = properties;
         this.clock = clock;
         this.meters = meters;
-        this.retrier = new Retrier(properties.retry(), sleeper, RandomGenerator.getDefault());
+        // java.util.Random is in java.base. RandomGenerator.getDefault() needs the jdk.random module,
+        // which slim JRE images (like the one in our Dockerfile) do not include.
+        this.retrier = new Retrier(properties.retry(), sleeper, new Random());
     }
 
     public void handle(PageRequested page) {
