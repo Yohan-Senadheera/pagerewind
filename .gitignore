@@ -35,3 +35,8 @@ target/
 .project
 .classpath
 .factorypath
+
+# Terraform
+.terraform/
+*.tfvars
+*.tfplan
