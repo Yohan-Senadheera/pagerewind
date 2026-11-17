@@ -87,3 +87,31 @@ resource "aws_vpc_security_group_egress_rule" "all" {
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
 }
+
+# Node-to-node traffic for k3s
+resource "aws_vpc_security_group_ingress_rule" "k3s_api_internal" {
+  security_group_id            = aws_security_group.nodes.id
+  description                  = "k3s API between nodes"
+  referenced_security_group_id = aws_security_group.nodes.id
+  ip_protocol                  = "tcp"
+  from_port                    = 6443
+  to_port                      = 6443
+}
+
+resource "aws_vpc_security_group_ingress_rule" "kubelet_internal" {
+  security_group_id            = aws_security_group.nodes.id
+  description                  = "kubelet between nodes"
+  referenced_security_group_id = aws_security_group.nodes.id
+  ip_protocol                  = "tcp"
+  from_port                    = 10250
+  to_port                      = 10250
+}
+
+resource "aws_vpc_security_group_ingress_rule" "flannel_internal" {
+  security_group_id            = aws_security_group.nodes.id
+  description                  = "flannel VXLAN pod network between nodes"
+  referenced_security_group_id = aws_security_group.nodes.id
+  ip_protocol                  = "udp"
+  from_port                    = 8472
+  to_port                      = 8472
+}
