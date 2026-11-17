@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,8 @@ class EventTypeTest {
                 .isEqualTo(EventType.INCIDENT_ACKNOWLEDGED);
         assertThat(new IncidentResolved(id, now, 1, incident, "alice").type())
                 .isEqualTo(EventType.INCIDENT_RESOLVED);
-        assertThat(new PageRequested(id, now, 1, incident, 1, "user:alice").type())
+        assertThat(new PageRequested(id, now, 1, incident, 1, 1, "alice", "Alice",
+                List.of(new Contact(Contact.Channel.EMAIL, "a@example.com")), "api", Severity.CRITICAL, "down").type())
                 .isEqualTo(EventType.PAGE_REQUESTED);
     }
 

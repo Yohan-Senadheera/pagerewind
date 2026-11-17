@@ -30,6 +30,7 @@
         <module>libs/messaging</module>
         <module>services/ingest</module>
         <module>services/incident</module>
+        <module>services/schedule</module>
     </modules>
 
     <properties>
