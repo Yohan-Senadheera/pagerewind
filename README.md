@@ -1,84 +1,111 @@
 # PageRewind
 
+[![Java CI](https://github.com/Yohan-Senadheera/pagerewind/actions/workflows/java-ci.yml/badge.svg)](https://github.com/Yohan-Senadheera/pagerewind/actions/workflows/java-ci.yml)
+[![End-to-end](https://github.com/Yohan-Senadheera/pagerewind/actions/workflows/e2e.yml/badge.svg)](https://github.com/Yohan-Senadheera/pagerewind/actions/workflows/e2e.yml)
+[![Terraform checks](https://github.com/Yohan-Senadheera/pagerewind/actions/workflows/terraform-ci.yml/badge.svg)](https://github.com/Yohan-Senadheera/pagerewind/actions/workflows/terraform-ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 **On-call that pages you, then rewinds what your pods did before they died.**
 
-PageRewind is an open-source, self-hosted on-call and incident tool for Kubernetes teams. When an alert
-fires, it pages the right person and attaches the answer: the logs from before the pod died and a
-timeline of what changed just before the alert.
+PageRewind is an open-source, self-hosted on-call and incident tool for Kubernetes teams. An alert
+comes in, duplicates become one incident, the person on call is paged on Telegram or email, and if
+nobody acknowledges, the page escalates to the next person.
 
-> **Status: in progress.** Nothing here is released yet. Features below are planned until the
-> matching release notes say otherwise.
+> **Status: v0.1.0 preview.** Alert intake, incidents, on-call schedules, escalation, paging and the
+> status page work and are tested end to end. **There is no login yet** (planned for v0.2.0), so run it
+> only on a private network. The flight recorder and "what changed" features are planned.
 
-## Why
+## Try it in 5 minutes
 
-When something breaks at 3 AM, two things slow the responder down:
+Needs Docker with Compose and about 3 GB of free memory.
 
-1. **The evidence is gone.** Kubernetes restarts or replaces the failing pod, and its logs go with it.
-2. **Nobody knows what changed.** Was it a deploy? A config change? Scaling? You search five tools to
-   find out.
+```bash
+git clone https://github.com/Yohan-Senadheera/pagerewind.git && cd pagerewind
+cp .env.example .env            # then replace every "change-me" (openssl rand -hex 24)
+docker compose up -d
+./scripts/seed-demo.sh          # Alice is on call for "checkout"; Bob is paged after 1 minute
+./scripts/send-test-alert.sh    # send it several times: still one incident
+```
 
-PageRewind keeps a short rolling recording of each workload (a flight recorder) and a log of recent
-changes, so every incident arrives with both.
+Then open:
+
+| What | Where |
+|---|---|
+| Incidents (acknowledge, resolve, timeline) | http://localhost:8082/ui |
+| Who is on call | http://localhost:8083/ui |
+| Pages sent by email (open one, use its acknowledge link) | http://localhost:8025 |
+| Public status page | http://localhost:8085 |
+| API docs | http://localhost:8082/swagger-ui.html |
+
+Wait a minute without acknowledging and Bob gets paged too. Acknowledge from the email link and the
+escalation stops. `./scripts/send-test-alert.sh resolved` sends the "resolved" signal.
+
+## What works today
+
+| Area | What it does |
+|---|---|
+| **Alert intake** | Alertmanager webhook and a generic JSON webhook; bearer token or HMAC-SHA256 signature; answers `202` only after the message broker has stored the alert, `503` otherwise so the sender retries |
+| **Incidents** | Duplicate alerts become one incident (enforced by a database index, safe under concurrency); `triggered → acknowledged → resolved` with optimistic locking; timeline and notes; REST API with OpenAPI |
+| **On-call** | Teams, rotations and overrides; handovers keep local time across daylight saving changes; escalation policies with repeat |
+| **Escalation** | Timers are database rows, so restarts never lose or repeat a page; several replicas share the work safely |
+| **Paging** | Telegram with Acknowledge and Resolve buttons; email with signed, single-use, 30-minute links; retries with backoff and jitter; rate limits |
+| **Status page** | Public page per service (operational, degraded, major outage) that never shows alert text |
+| **Reliability** | Transactional outbox and idempotent consumers; poison messages go to a dead-letter queue after 5 attempts |
+| **Operations** | Health probes, Prometheus metrics, JSON logs in every service |
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    Apps["Your apps on Kubernetes"] -->|metrics| Prom["Prometheus + Alertmanager"]
-    Prom -->|alert| PR["PageRewind"]
-    Apps -.->|logs, events, changes| PR
-    PR -->|"page: Telegram / email"| OnCall["On-call engineer"]
-    OnCall -->|ack / resolve| PR
-    PR --> Inc["Incident with evidence + likely cause"]
+    AM["Alertmanager"] -->|webhook| ingest
+    ingest -->|alert.received| MQ[("RabbitMQ")]
+    MQ --> incident
+    incident -->|incident.* via outbox| MQ
+    MQ --> schedule
+    schedule -->|page.requested via outbox| MQ
+    MQ --> notify
+    notify -->|Telegram / email| Person["On-call person"]
+    Person -->|acknowledge| notify
+    notify -->|REST| incident
+    MQ --> status["status page"]
 ```
-
-1. Alertmanager sends an alert to PageRewind.
-2. Duplicate alerts become one incident.
-3. PageRewind pages whoever is on call, and escalates to the next person if nobody acknowledges.
-4. The incident already contains the workload's last minutes of logs and events, and the changes
-   that happened just before, with the most likely cause highlighted.
-
-## Features (planned for v0.1.0)
-
-| Area | Feature |
-|---|---|
-| Alerts | Alertmanager, Grafana and generic webhooks (HMAC-signed); duplicate removal and grouping |
-| Incidents | Triggered, acknowledged, resolved; timeline; notes; severity; runbook links |
-| On-call | Rotations, overrides, escalation policies; timers survive restarts |
-| Notifications | Telegram and email with one-tap acknowledge; retries and rate limits |
-| **Flight recorder** | Rolling buffer of recent logs and events per workload, frozen into the incident |
-| **What changed** | Deploys, image, config, scaling and node changes before the alert, with a likely cause |
-| Access | Login with OIDC (Keycloak); roles admin, responder, viewer |
-| Status page | Public, read-only |
-| Reports | Time to acknowledge and resolve per service; post-mortem template from the timeline |
-
-## Architecture
-
-Java 21 and Spring Boot microservices, PostgreSQL, RabbitMQ, Redis and S3-compatible storage,
-running on Kubernetes. See [docs/architecture.md](docs/architecture.md) for diagrams.
 
 | Service | Job |
 |---|---|
-| `gateway` | Entry point: routing, token checks, rate limits |
-| `ingest` | Receives alerts, checks signatures, removes duplicates |
-| `incident` | Incident lifecycle, timeline, API and web UI |
-| `schedule` | Who is on call; escalation timers |
-| `notify` | Sends Telegram and email pages |
-| `capture` | Flight recorder and "what changed" |
-| `status` | Public status page |
+| `ingest` | Receives alerts, checks the token or signature, marks repeats, publishes with broker confirms |
+| `incident` | Incident life cycle, timeline, REST API and web UI |
+| `schedule` | People, teams, rotations, escalation policies and durable escalation timers |
+| `notify` | Telegram and email pages; acknowledge and resolve from the page |
+| `status` | Public status page built from incident events |
 
-## Quickstart
+Java 21, Spring Boot 4.1, PostgreSQL (one schema per service, Flyway), RabbitMQ (quorum queues),
+Redis. More diagrams in [docs/architecture.md](docs/architecture.md); design decisions in
+[docs/adr/](docs/adr/).
 
-Coming with v0.1.0: `docker compose up` for a local trial, and a Helm chart for Kubernetes.
+## How it is tested
 
-## Project docs
+Every pull request runs:
 
-- [Architecture](docs/architecture.md)
-- [Architecture decision records](docs/adr/)
+- **Unit and integration tests** (about 200) against real PostgreSQL, RabbitMQ, Redis and Mailpit in
+  containers (Testcontainers), including concurrency tests: 100 copies of one alert make exactly one
+  incident; parallel escalation runners page each step once; a publisher that dies mid-batch loses nothing.
+- **An end-to-end test** that builds the images, starts this quickstart and walks the whole flow:
+  alert, incident, page, escalation, acknowledge by email link, status page.
+- **Terraform checks** for the reference deployment.
 
-## Contributing
+## Reference deployment
 
-Not open for contributions yet. Contribution guidelines will be added before the first release.
+The project also runs on a two-node k3s cluster on AWS, built with Terraform and managed with Argo CD
+(GitOps) and cert-manager (Let's Encrypt). CI holds no AWS credentials. See [infra/](infra/),
+[platform/](platform/) and `scripts/pagerewind.ps1`.
+
+## Roadmap
+
+| Version | Planned |
+|---|---|
+| v0.2.0 | Login with OIDC (Keycloak), roles admin, responder and viewer; tokens between services; `gateway` |
+| v0.3.0 | Helm chart; signed images with SBOM; SLO dashboards and alerts |
+| v0.4.0 | **Flight recorder** (recent logs and events frozen into the incident) and **what changed** (deploys and config changes before the alert, with a likely cause) |
 
 ## License
 

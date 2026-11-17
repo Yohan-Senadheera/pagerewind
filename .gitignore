@@ -43,3 +43,6 @@ target/
 *.tfstate
 *.tfstate.*
 backend.hcl
+
+# Local settings
+.env
