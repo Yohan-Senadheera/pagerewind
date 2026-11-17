@@ -4,7 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.pagerewind.events.IncidentTriggered;
 import dev.pagerewind.events.Messaging;
-import dev.pagerewind.incident.OutboxRepository.OutboxMessage;
+import dev.pagerewind.messaging.MessagePublisher;
+import dev.pagerewind.messaging.OutboxMessage;
+import dev.pagerewind.messaging.OutboxRelay;
+import dev.pagerewind.messaging.OutboxRepository;
+import dev.pagerewind.messaging.RabbitMessagePublisher;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -59,7 +63,7 @@ class OutboxIT extends IntegrationTest {
     }
 
     private OutboxRelay relayWith(MessagePublisher publisher) {
-        return new OutboxRelay(outbox, publisher, transaction, properties, Clock.systemUTC(), new SimpleMeterRegistry());
+        return new OutboxRelay(outbox, publisher, transaction, 50, Clock.systemUTC(), new SimpleMeterRegistry());
     }
 
     private List<Message> drainQueue() {

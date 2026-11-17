@@ -1,6 +1,5 @@
-package dev.pagerewind.incident;
+package dev.pagerewind.messaging;
 
-import dev.pagerewind.incident.OutboxRepository.OutboxMessage;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -8,7 +7,6 @@ import java.time.Clock;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -19,7 +17,6 @@ import org.springframework.transaction.support.TransactionTemplate;
  * are idempotent by {@code eventId}, so this is safe. Rows are published in order; the batch stops
  * at the first failure and the remaining rows wait for the next run.
  */
-@Component
 public class OutboxRelay {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
@@ -27,17 +24,17 @@ public class OutboxRelay {
     private final OutboxRepository outbox;
     private final MessagePublisher publisher;
     private final TransactionTemplate transaction;
-    private final IncidentProperties properties;
+    private final int batchSize;
     private final Clock clock;
     private final Counter published;
     private final Counter failed;
 
     public OutboxRelay(OutboxRepository outbox, MessagePublisher publisher, TransactionTemplate transaction,
-            IncidentProperties properties, Clock clock, MeterRegistry meters) {
+            int batchSize, Clock clock, MeterRegistry meters) {
         this.outbox = outbox;
         this.publisher = publisher;
         this.transaction = transaction;
-        this.properties = properties;
+        this.batchSize = batchSize;
         this.clock = clock;
         this.published = Counter.builder("pagerewind.outbox.published").description("Outbox events published").register(meters);
         this.failed = Counter.builder("pagerewind.outbox.failures").description("Outbox publish failures").register(meters);
@@ -46,10 +43,14 @@ public class OutboxRelay {
                 .register(meters);
     }
 
+    public int batchSize() {
+        return batchSize;
+    }
+
     /** Publishes up to one batch. Returns how many rows were published. */
     public int relayOnce() {
         Integer count = transaction.execute(status -> {
-            List<OutboxMessage> batch = outbox.lockUnpublished(properties.outboxBatchSize());
+            List<OutboxMessage> batch = outbox.lockUnpublished(batchSize);
             int done = 0;
             for (OutboxMessage message : batch) {
                 try {

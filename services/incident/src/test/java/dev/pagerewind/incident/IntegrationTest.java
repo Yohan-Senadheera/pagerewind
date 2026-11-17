@@ -22,7 +22,7 @@ import tools.jackson.databind.json.JsonMapper;
  * and one set of containers. The background outbox relay is off so tests drive it directly.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "pagerewind.incident.outbox-relay-enabled=false")
+        properties = "pagerewind.messaging.outbox.relay-enabled=false")
 @Import(TestcontainersConfiguration.class)
 abstract class IntegrationTest {
 

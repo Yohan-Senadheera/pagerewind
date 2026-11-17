@@ -1,6 +1,4 @@
-package dev.pagerewind.incident;
-
-import dev.pagerewind.incident.OutboxRepository.OutboxMessage;
+package dev.pagerewind.messaging;
 
 /** Sends one outbox message to the broker. Throws if the broker did not confirm it. */
 public interface MessagePublisher {

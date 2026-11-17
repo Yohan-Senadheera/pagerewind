@@ -6,6 +6,8 @@ import dev.pagerewind.events.IncidentAcknowledged;
 import dev.pagerewind.events.IncidentResolved;
 import dev.pagerewind.events.IncidentTriggered;
 import dev.pagerewind.events.PageRewindEvent;
+import dev.pagerewind.messaging.OutboxRepository;
+import dev.pagerewind.messaging.ProcessedEventRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
