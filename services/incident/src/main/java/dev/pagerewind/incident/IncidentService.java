@@ -93,7 +93,7 @@ public class IncidentService {
                 outbox.add(new IncidentTriggered(UUID.randomUUID(), now, IncidentTriggered.CURRENT_VERSION, id,
                         alert.fingerprint(), alert.service(), alert.severity(), alert.summary()), now);
                 attachAlert(id, alert, now);
-                Counter.builder("pagerewind.incidents.created")
+                Counter.builder("pagerewind.incidents.opened")
                         .description("Incidents opened")
                         .tag("severity", alert.severity().name().toLowerCase())
                         .register(meters)

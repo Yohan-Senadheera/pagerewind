@@ -200,7 +200,7 @@ class IncidentApiIT extends IntegrationTest {
         assertThat(get("/actuator/health/readiness").statusCode()).isEqualTo(200);
         HttpResponse<String> metrics = get("/actuator/prometheus");
         assertThat(metrics.statusCode()).isEqualTo(200);
-        assertThat(metrics.body()).contains("pagerewind_incidents_created_total").contains("pagerewind_outbox_pending");
+        assertThat(metrics.body()).contains("pagerewind_incidents_opened_total").contains("pagerewind_outbox_pending");
         HttpResponse<String> docs = get("/v3/api-docs");
         assertThat(docs.statusCode()).isEqualTo(200);
         assertThat(docs.body()).contains("/v1/incidents/{id}/acknowledge");
