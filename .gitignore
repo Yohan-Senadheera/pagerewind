@@ -40,3 +40,6 @@ target/
 .terraform/
 *.tfvars
 *.tfplan
+*.tfstate
+*.tfstate.*
+backend.hcl

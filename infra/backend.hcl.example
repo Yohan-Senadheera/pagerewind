@@ -1,0 +1,4 @@
+# Copy to backend.hcl (git ignores it) and fill in your values.
+# Used by: terraform init -backend-config="../backend.hcl"
+bucket  = "pagerewind-tfstate-<your-aws-account-id>"
+profile = "<your-aws-cli-profile>"
