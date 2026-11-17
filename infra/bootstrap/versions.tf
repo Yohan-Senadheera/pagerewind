@@ -7,6 +7,15 @@ terraform {
       version = "~> 6.0"
     }
   }
+
+  # Bucket and profile come from ../backend.hcl (not committed):
+  #   terraform init -backend-config="../backend.hcl"
+  backend "s3" {
+    key          = "bootstrap/terraform.tfstate"
+    region       = "ap-southeast-2"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 provider "aws" {

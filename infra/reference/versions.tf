@@ -12,11 +12,11 @@ terraform {
     }
   }
 
+  # Bucket and profile come from ../backend.hcl (not committed):
+  #   terraform init -backend-config="../backend.hcl"
   backend "s3" {
-    bucket       = "pagerewind-tfstate-715412582959"
     key          = "reference/terraform.tfstate"
     region       = "ap-southeast-2"
-    profile      = "pager"
     encrypt      = true
     use_lockfile = true
   }
