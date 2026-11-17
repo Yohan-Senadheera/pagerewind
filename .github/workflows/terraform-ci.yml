@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        stack: [bootstrap, reference]
+        stack: [bootstrap, ip, reference]
     steps:
       - uses: actions/checkout@v4
 

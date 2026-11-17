@@ -1,5 +1,5 @@
 output "server_public_ip" {
-  value = aws_eip.server.public_ip
+  value = var.public_ip
 }
 
 output "agent_private_ip" {
@@ -15,5 +15,5 @@ output "agent_instance_id" {
 }
 
 output "ssh_command" {
-  value = "ssh -i ~/.ssh/pagerewind ubuntu@${aws_eip.server.public_ip}"
+  value = "ssh -i ~/.ssh/pagerewind ubuntu@${var.public_ip}"
 }

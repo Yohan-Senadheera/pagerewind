@@ -24,6 +24,16 @@ variable "root_volume_gb" {
   default = 30
 }
 
+variable "eip_allocation_id" {
+  description = "Elastic IP for the server, created by the infra/ip stack so it survives a rebuild"
+  type        = string
+}
+
+variable "public_ip" {
+  description = "The address of that Elastic IP; added to the Kubernetes API certificate"
+  type        = string
+}
+
 variable "server_private_ip" {
   description = "Fixed private IP for the server, so the agent knows where to join"
   type        = string

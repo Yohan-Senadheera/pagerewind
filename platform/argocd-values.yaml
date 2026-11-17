@@ -1,0 +1,5 @@
+# Values for the one manual Helm install (Argo CD itself). Everything else is installed by Argo CD
+# from platform/apps. TLS is terminated by Traefik, so the Argo CD server runs without its own TLS.
+configs:
+  params:
+    server.insecure: true
