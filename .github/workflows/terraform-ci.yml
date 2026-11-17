@@ -1,0 +1,42 @@
+name: Terraform checks
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.stack }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [bootstrap, reference]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.17.1
+
+      - name: Formatting
+        run: terraform fmt -check -recursive infra
+
+      - name: Dummy SSH key (the reference stack reads ~/.ssh/pagerewind.pub)
+        run: mkdir -p ~/.ssh && ssh-keygen -t ed25519 -N "" -q -f ~/.ssh/pagerewind
+
+      - name: Validate
+        working-directory: infra/${{ matrix.stack }}
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
