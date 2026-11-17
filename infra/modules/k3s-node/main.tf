@@ -64,12 +64,6 @@ resource "aws_iam_instance_profile" "node" {
   role = aws_iam_role.node.name
 }
 
-# Fixed public IP for the server
-resource "aws_eip" "server" {
-  domain = "vpc"
-  tags   = { Name = "${var.name}-server" }
-}
-
 resource "aws_instance" "server" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
@@ -82,7 +76,7 @@ resource "aws_instance" "server" {
 
   user_data = templatefile("${path.module}/server.sh.tftpl", {
     token     = random_password.k3s_token.result
-    public_ip = aws_eip.server.public_ip
+    public_ip = var.public_ip
   })
 
   root_block_device {
@@ -104,7 +98,7 @@ resource "aws_instance" "server" {
 
 resource "aws_eip_association" "server" {
   instance_id   = aws_instance.server.id
-  allocation_id = aws_eip.server.id
+  allocation_id = var.eip_allocation_id
 }
 
 resource "aws_instance" "agent" {
