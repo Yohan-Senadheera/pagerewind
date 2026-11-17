@@ -1,0 +1,61 @@
+# Only these paths are public. The incident and schedule APIs and every /actuator endpoint stay
+# inside the cluster until logins are added.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pagerewind-public
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - status.pagerewind.dev
+        - ingest.pagerewind.dev
+        - notify.pagerewind.dev
+      secretName: pagerewind-public-tls
+  rules:
+    - host: status.pagerewind.dev
+      http:
+        paths:
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: status
+                port:
+                  number: 80
+          - path: /v1/status
+            pathType: Exact
+            backend:
+              service:
+                name: status
+                port:
+                  number: 80
+    - host: ingest.pagerewind.dev
+      http:
+        paths:
+          - path: /v1/alerts
+            pathType: Prefix
+            backend:
+              service:
+                name: ingest
+                port:
+                  number: 80
+    - host: notify.pagerewind.dev
+      http:
+        paths:
+          - path: /v1/telegram/webhook
+            pathType: Exact
+            backend:
+              service:
+                name: notify
+                port:
+                  number: 80
+          - path: /v1/actions
+            pathType: Prefix
+            backend:
+              service:
+                name: notify
+                port:
+                  number: 80

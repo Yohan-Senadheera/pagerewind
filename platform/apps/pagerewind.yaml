@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pagerewind
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Yohan-Senadheera/pagerewind.git
+    targetRevision: main
+    path: deploy/pagerewind
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pagerewind
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
