@@ -11,6 +11,9 @@ PageRewind is an open-source, self-hosted on-call and incident tool for Kubernet
 comes in, duplicates become one incident, the person on call is paged on Telegram or email, and if
 nobody acknowledges, the page escalates to the next person.
 
+**Live demo:** [status.pagerewind.dev](https://status.pagerewind.dev) (the public status page of the reference
+deployment on AWS; the cluster may be stopped between demos to save cost).
+
 > **Status: v0.1.0 preview.** Alert intake, incidents, on-call schedules, escalation, paging and the
 > status page work and are tested end to end. **There is no login yet** (planned for v0.2.0), so run it
 > only on a private network. The flight recorder and "what changed" features are planned.
@@ -92,6 +95,13 @@ Every pull request runs:
 - **An end-to-end test** that builds the images, starts this quickstart and walks the whole flow:
   alert, incident, page, escalation, acknowledge by email link, status page.
 - **Terraform checks** for the reference deployment.
+
+## Verified on the live cluster
+
+On the reference deployment, a real alert pages the on-call engineer on Telegram within seconds,
+escalates to the backup engineer after 2 minutes without acknowledgement, and stops when someone taps
+**Acknowledge** on their phone. With the `schedule` pod deleted between the two steps, the second page
+still arrived exactly on time, because escalation timers live in PostgreSQL, not in memory.
 
 ## Reference deployment
 
