@@ -34,6 +34,7 @@
         <module>services/schedule</module>
         <module>services/notify</module>
         <module>services/status</module>
+        <module>services/gateway</module>
     </modules>
 
     <properties>
