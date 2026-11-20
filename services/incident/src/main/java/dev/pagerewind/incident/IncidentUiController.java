@@ -2,6 +2,8 @@ package dev.pagerewind.incident;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,12 +13,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-/** Server-rendered pages for responders. Logins are added with the gateway; until then this is internal only. */
+/** Server-rendered pages, reached through the gateway, which signs people in and forwards their token. */
 @Controller
 @RequestMapping("/ui")
 public class IncidentUiController {
-
-    private static final String UI_ACTOR = "web";
 
     private final IncidentService service;
 
@@ -43,13 +43,15 @@ public class IncidentUiController {
     }
 
     @PostMapping("/incidents/{id}/acknowledge")
-    public String acknowledge(@PathVariable UUID id, RedirectAttributes redirect) {
-        return act(id, redirect, () -> service.acknowledge(id, UI_ACTOR, null), "Incident acknowledged.");
+    @PreAuthorize("hasRole('responder')")
+    public String acknowledge(@PathVariable UUID id, Authentication caller, RedirectAttributes redirect) {
+        return act(id, redirect, () -> service.acknowledge(id, caller.getName(), null), "Incident acknowledged.");
     }
 
     @PostMapping("/incidents/{id}/resolve")
-    public String resolve(@PathVariable UUID id, RedirectAttributes redirect) {
-        return act(id, redirect, () -> service.resolve(id, UI_ACTOR, null), "Incident resolved.");
+    @PreAuthorize("hasRole('responder')")
+    public String resolve(@PathVariable UUID id, Authentication caller, RedirectAttributes redirect) {
+        return act(id, redirect, () -> service.resolve(id, caller.getName(), null), "Incident resolved.");
     }
 
     private String act(UUID id, RedirectAttributes redirect, Runnable action, String success) {

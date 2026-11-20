@@ -29,6 +29,7 @@
         .muted { color: var(--muted); } code { font-size: .85em; }
         .actions { display: flex; gap: .5rem; margin: 1rem 0; }
         .table-wrap { overflow-x: auto; }
+        header .spacer { flex: 1; } header form { margin: 0; }
     </style>
 </head>
 <body>
@@ -36,6 +37,13 @@
     <a href="/ui"><strong>PageRewind</strong></a>
     <a href="/ui">Open incidents</a>
     <a href="/ui?show=all">All incidents</a>
+    <a href="/ui/schedules">On call</a>
+    <span class="spacer"></span>
+    <span class="muted" th:if="${currentUser}" th:text="${currentUser}">alice</span>
+    <form method="post" action="/logout" th:if="${csrfToken}">
+        <input type="hidden" name="_csrf" th:value="${csrfToken}">
+        <button type="submit">Sign out</button>
+    </form>
 </header>
 </body>
 </html>

@@ -28,6 +28,7 @@
     <modules>
         <module>libs/events</module>
         <module>libs/messaging</module>
+        <module>libs/security</module>
         <module>services/ingest</module>
         <module>services/incident</module>
         <module>services/schedule</module>
@@ -51,6 +52,17 @@
                 <groupId>dev.pagerewind</groupId>
                 <artifactId>messaging</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.pagerewind</groupId>
+                <artifactId>security</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.pagerewind</groupId>
+                <artifactId>security</artifactId>
+                <version>${project.version}</version>
+                <type>test-jar</type>
             </dependency>
             <dependency>
                 <groupId>org.springdoc</groupId>

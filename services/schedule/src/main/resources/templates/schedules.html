@@ -19,9 +19,20 @@
         .muted { color: var(--muted); } .now { font-weight: 600; }
         .tag { font-size: .75rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 .45rem; margin-left: .35rem; }
         .table-wrap { overflow-x: auto; }
+        header { border-bottom: 1px solid var(--line); padding: .75rem 1rem; display: flex; gap: 1.5rem; align-items: center; }
+        header a { color: var(--fg); text-decoration: none; } header strong { font-size: 1.05rem; }
+        header .spacer { flex: 1; }
     </style>
 </head>
 <body>
+<header>
+    <a href="/ui"><strong>PageRewind</strong></a>
+    <a href="/ui">Open incidents</a>
+    <a href="/ui?show=all">All incidents</a>
+    <a href="/ui/schedules">On call</a>
+    <span class="spacer"></span>
+    <span class="muted" th:if="${currentUser}" th:text="${currentUser}">alice</span>
+</header>
 <main>
     <h1>Who is on call</h1>
     <p th:if="${teams.isEmpty()}" class="muted">No teams yet. Create one with <code>PUT /v1/teams/{id}</code>.</p>

@@ -9,11 +9,13 @@ import dev.pagerewind.events.PageRequested;
 import dev.pagerewind.events.Severity;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +32,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -45,6 +48,7 @@ class NotifyIT {
     private static final String BOT_TOKEN = UUID.randomUUID().toString();
     private static final String WEBHOOK_SECRET = UUID.randomUUID().toString();
     private static final String LINK_SECRET = UUID.randomUUID().toString();
+    private static final String CLIENT_SECRET = UUID.randomUUID().toString();
     private static final Duration WAIT = Duration.ofSeconds(30);
 
     private static final StubServer STUB = startStub();
@@ -71,6 +75,8 @@ class NotifyIT {
         registry.add("pagerewind.notify.telegram.webhook-secret", () -> WEBHOOK_SECRET);
         registry.add("pagerewind.notify.telegram.api-base-url", () -> STUB.url() + "/tg");
         registry.add("pagerewind.notify.incident-base-url", () -> STUB.url() + "/incident");
+        registry.add("spring.security.oauth2.client.provider.keycloak.token-uri", () -> STUB.url() + "/keycloak/token");
+        registry.add("spring.security.oauth2.client.registration.notify-svc.client-secret", () -> CLIENT_SECRET);
         registry.add("pagerewind.notify.action-links.secret", () -> LINK_SECRET);
         registry.add("pagerewind.notify.public-base-url", () -> "https://pagerewind.test");
         registry.add("pagerewind.notify.retry.initial-backoff", () -> "1ms");
@@ -94,6 +100,8 @@ class NotifyIT {
     private JsonMapper json;
     @Autowired
     private Environment environment;
+    @Autowired
+    private OAuth2AuthorizedClientService tokenCache;
 
     private final HttpClient http = HttpClient.newHttpClient();
 
@@ -101,6 +109,7 @@ class NotifyIT {
     void reset() throws Exception {
         jdbc.sql("TRUNCATE delivery, action_token_use").update();
         STUB.reset();
+        tokenCache.removeAuthorizedClient(IncidentClient.REGISTRATION, IncidentClient.REGISTRATION);
         http.send(HttpRequest.newBuilder(mailpit("/api/v1/messages")).DELETE().build(), HttpResponse.BodyHandlers.discarding());
     }
 
@@ -220,8 +229,41 @@ class NotifyIT {
         List<StubServer.Request> calls = STUB.requests("/incident/v1/incidents/" + incident + "/acknowledge");
         assertThat(calls).hasSize(1);
         assertThat(calls.getFirst().body()).isEqualTo("{\"actor\":\"alice\"}");
+        assertThat(calls.getFirst().authorization()).isEqualTo("Bearer " + StubServer.ACCESS_TOKEN);
         assertThat(STUB.requests("/answerCallbackQuery")).hasSize(1);
         assertThat(STUB.requests("/answerCallbackQuery").getFirst().body()).contains("Incident acknowledged.");
+
+        List<StubServer.Request> tokenRequests = STUB.requests("/keycloak/token");
+        assertThat(tokenRequests).hasSize(1);
+        assertThat(tokenRequests.getFirst().body()).contains("grant_type=client_credentials");
+        String basic = Base64.getEncoder().encodeToString(("notify-svc:" + CLIENT_SECRET).getBytes(StandardCharsets.UTF_8));
+        assertThat(tokenRequests.getFirst().authorization()).isEqualTo("Basic " + basic);
+    }
+
+    @Test
+    void theServiceTokenIsReusedUntilItExpires() throws Exception {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        service.handle(page(first, TELEGRAM));
+        service.handle(page(second, TELEGRAM));
+
+        webhook(WEBHOOK_SECRET, callback("1001", "ack:" + first));
+        webhook(WEBHOOK_SECRET, callback("1001", "ack:" + second));
+
+        assertThat(STUB.requests("/acknowledge")).hasSize(2);
+        assertThat(STUB.requests("/keycloak/token")).hasSize(1);
+    }
+
+    @Test
+    void whenKeycloakRefusesNotifyThePersonIsToldToRetryAndNothingIsChanged() throws Exception {
+        UUID incident = UUID.randomUUID();
+        service.handle(page(incident, TELEGRAM));
+        STUB.script("/keycloak/token", 401, "{\"error\":\"invalid_client\"}");
+
+        webhook(WEBHOOK_SECRET, callback("1001", "ack:" + incident));
+
+        assertThat(STUB.requests("/incident/")).isEmpty();
+        assertThat(STUB.requests("/answerCallbackQuery").getFirst().body()).contains("could not reach the incident service");
     }
 
     @Test

@@ -26,6 +26,7 @@ class IncidentApiIT extends IntegrationTest {
     private Environment environment;
 
     private final HttpClient http = HttpClient.newHttpClient();
+    private final String alice = TOKENS.person("alice", "responder");
 
     private UUID openIncident() {
         String fingerprint = newFingerprint();
@@ -80,7 +81,7 @@ class IncidentApiIT extends IntegrationTest {
                 TimelineEntry.Type.ALERT, TimelineEntry.Type.ACKNOWLEDGED, TimelineEntry.Type.RESOLVED);
         assertThat(timeline.get(2).actor()).isEqualTo("alice");
         assertThat(timeline.get(2).data()).containsEntry("note", "looking");
-        assertThat(timeline.get(3).actor()).isEqualTo(IncidentController.DEFAULT_ACTOR);
+        assertThat(timeline.get(3).actor()).isEqualTo("alice");
 
         assertThat(count("SELECT count(*) FROM outbox WHERE event_type = 'INCIDENT_ACKNOWLEDGED'")).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM outbox WHERE event_type = 'INCIDENT_RESOLVED'")).isEqualTo(1);
@@ -148,7 +149,7 @@ class IncidentApiIT extends IntegrationTest {
         TimelineEntry note = service.timeline(id).getLast();
         assertThat(note.type()).isEqualTo(TimelineEntry.Type.NOTE);
         assertThat(note.message()).isEqualTo("rolled back v42");
-        assertThat(note.actor()).isEqualTo("bob");
+        assertThat(note.actor()).as("people are recorded as themselves, whatever the body says").isEqualTo("alice");
     }
 
     @Test
@@ -207,11 +208,12 @@ class IncidentApiIT extends IntegrationTest {
     }
 
     private HttpResponse<String> get(String path) throws IOException, InterruptedException {
-        return http.send(HttpRequest.newBuilder(uri(path)).GET().build(), HttpResponse.BodyHandlers.ofString());
+        return http.send(HttpRequest.newBuilder(uri(path)).header("Authorization", "Bearer " + alice).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> post(String path, String body) throws IOException, InterruptedException {
-        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path));
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path)).header("Authorization", "Bearer " + alice);
         if (body == null) {
             request.POST(HttpRequest.BodyPublishers.noBody());
         } else {

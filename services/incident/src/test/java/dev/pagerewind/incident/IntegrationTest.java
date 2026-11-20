@@ -3,6 +3,7 @@ package dev.pagerewind.incident;
 import dev.pagerewind.events.AlertReceived;
 import dev.pagerewind.events.AlertStatus;
 import dev.pagerewind.events.Severity;
+import dev.pagerewind.security.TestJwts;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
@@ -15,6 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -40,6 +43,13 @@ abstract class IntegrationTest {
     protected MeterRegistry meters;
     @Autowired
     protected IncidentProperties properties;
+
+    protected static final TestJwts TOKENS = TestJwts.get();
+
+    @DynamicPropertySource
+    static void tokenChecks(DynamicPropertyRegistry registry) {
+        TestJwts.register(registry);
+    }
 
     @BeforeEach
     void cleanState() {
