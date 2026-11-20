@@ -1,0 +1,128 @@
+spring:
+  application:
+    name: gateway
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: pagerewind-web
+            client-secret: ${PAGEREWIND_WEB_CLIENT_SECRET:}
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: openid,profile
+        provider:
+          keycloak:
+            # The browser goes to the public address; the gateway itself may use an internal one.
+            authorization-uri: ${pagerewind.gateway.issuer}/protocol/openid-connect/auth
+            token-uri: ${pagerewind.gateway.backchannel}/protocol/openid-connect/token
+            jwk-set-uri: ${pagerewind.gateway.backchannel}/protocol/openid-connect/certs
+            user-info-uri: ${pagerewind.gateway.backchannel}/protocol/openid-connect/userinfo
+            user-name-attribute: preferred_username
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 3000
+            response-timeout: 30s
+          routes:
+            # Pages: the gateway signs the person in and forwards their access token (TokenRelay).
+            - id: schedule-ui
+              uri: ${SCHEDULE_URL:http://localhost:8083}
+              predicates:
+                - Path=/ui/schedules,/ui/schedules/**
+              filters:
+                - TokenRelay=
+            - id: incident-ui
+              uri: ${INCIDENT_URL:http://localhost:8082}
+              predicates:
+                - Path=/ui,/ui/**
+              filters:
+                - TokenRelay=
+            # APIs: the caller brings its own bearer token and the service checks it. No cookies are used.
+            - id: incident-api
+              uri: ${INCIDENT_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/incidents,/api/v1/incidents/**
+              filters:
+                - StripPrefix=1
+            - id: schedule-api
+              uri: ${SCHEDULE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/people,/api/v1/people/**,/api/v1/teams,/api/v1/teams/**,/api/v1/escalations/**
+              filters:
+                - StripPrefix=1
+            # Public webhooks check their own signature or secret; the gateway limits the rate per client.
+            - id: alerts
+              uri: ${INGEST_URL:http://localhost:8081}
+              predicates:
+                - Path=/v1/alerts/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@clientAddress}"
+                    redis-rate-limiter.replenishRate: ${pagerewind.gateway.rate-limits.alerts-per-second}
+                    redis-rate-limiter.burstCapacity: ${pagerewind.gateway.rate-limits.alerts-burst}
+            - id: notify-public
+              uri: ${NOTIFY_URL:http://localhost:8084}
+              predicates:
+                - Path=/v1/telegram/webhook,/v1/actions/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@clientAddress}"
+                    redis-rate-limiter.replenishRate: ${pagerewind.gateway.rate-limits.actions-per-second}
+                    redis-rate-limiter.burstCapacity: ${pagerewind.gateway.rate-limits.actions-burst}
+
+server:
+  port: 8080
+  shutdown: graceful
+  # "framework" behind a proxy that sets X-Forwarded-* (Traefik in the cluster); "none" when exposed directly.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
+  reactive:
+    session:
+      timeout: 8h
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}
+
+pagerewind:
+  gateway:
+    # The realm's issuer as tokens show it (the public address of Keycloak).
+    issuer: ${PAGEREWIND_AUTH_ISSUER:http://localhost:8180/realms/pagerewind}
+    # The same realm as the gateway reaches it; often an internal address.
+    backchannel: ${PAGEREWIND_AUTH_BACKCHANNEL:${pagerewind.gateway.issuer}}
+    # How many proxies in front of the gateway add X-Forwarded-For; 0 trusts only the connecting address.
+    trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:0}
+    rate-limits:
+      alerts-per-second: 10
+      alerts-burst: 50
+      actions-per-second: 1
+      actions-burst: 10
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    redis:
+      enabled: false
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: ecs

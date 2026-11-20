@@ -131,6 +131,40 @@ Key rules:
 - **Least privilege:** `capture` can only read pods, logs, events and workload objects; it cannot
   exec into pods or read secrets.
 
+### Logins and tokens (built in Day 4, see ADR 0009)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor P as Person (browser)
+    participant GW as gateway
+    participant KC as Keycloak
+    participant INC as incident
+    participant NOT as notify
+
+    P->>GW: GET /ui/incidents/42
+    GW-->>P: Redirect to Keycloak (code flow + PKCE)
+    P->>KC: Username and password
+    KC-->>P: Redirect back with a code
+    P->>GW: Code
+    GW->>KC: Code + client secret
+    KC-->>GW: ID token, access token (roles, audience pagerewind-api)
+    GW->>INC: GET /ui/incidents/42 + access token + CSRF token header
+    INC-->>P: Page (Acknowledge only for responders), via the gateway
+    Note over P,GW: The browser only holds an HttpOnly session cookie
+    NOT->>KC: Client credentials (notify-svc)
+    KC-->>NOT: Access token (role responder)
+    NOT->>INC: POST /v1/incidents/42/acknowledge {"actor":"alice"} + token
+```
+
+| Caller | How it proves who it is | What it may do |
+|---|---|---|
+| Person in the browser | Keycloak login, session at the gateway | By role: viewer reads, responder acts on incidents, admin changes schedules |
+| Script or CI | `pagerewind-automation` token (client credentials) | admin |
+| `notify` | `notify-svc` token (client credentials) | responder, recorded as the person who was paged |
+| Alertmanager | Bearer token or HMAC signature at `ingest` | Send alerts (rate-limited at the gateway) |
+| Telegram, email links | Telegram secret header, signed single-use links | Acknowledge or resolve one incident |
+
 ## 4. Flight recorder and "what changed"
 
 ```mermaid

@@ -26,8 +26,20 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Tokens must come from this Keycloak realm (the "iss" claim) and be meant for PageRewind ("aud").
+          issuer-uri: ${PAGEREWIND_AUTH_ISSUER:http://localhost:8180/realms/pagerewind}
+          # Where to fetch the signing keys; inside a cluster this is usually an internal address.
+          jwk-set-uri: ${PAGEREWIND_AUTH_JWKS:${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/certs}
+          audiences: pagerewind-api
 
 server:
+  tomcat:
+    # Pages are served through the gateway: redirect with a path, never with this service's own address.
+    use-relative-redirects: true
   port: 8083
   shutdown: graceful
 

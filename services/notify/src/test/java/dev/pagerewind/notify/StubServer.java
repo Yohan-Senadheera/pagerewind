@@ -12,10 +12,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** A tiny HTTP server that records requests and returns scripted answers. Stands in for Telegram and the incident service. */
+/**
+ * A tiny HTTP server that records requests and returns scripted answers. Stands in for Telegram, the incident
+ * service and the Keycloak token endpoint (paths ending in {@code /token} return {@link #ACCESS_TOKEN}).
+ */
 final class StubServer implements AutoCloseable {
 
-    record Request(String method, String path, String body) {
+    static final String ACCESS_TOKEN = "stub-access-token";
+
+    record Request(String method, String path, String body, String authorization) {
     }
 
     private record Reply(int status, String body) {
@@ -31,7 +36,8 @@ final class StubServer implements AutoCloseable {
             String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             String path = exchange.getRequestURI().getPath();
             synchronized (requests) {
-                requests.add(new Request(exchange.getRequestMethod(), path, body));
+                requests.add(new Request(exchange.getRequestMethod(), path, body,
+                        exchange.getRequestHeaders().getFirst("Authorization")));
             }
             Reply reply = nextReply(path);
             byte[] bytes = reply.body().getBytes(StandardCharsets.UTF_8);
@@ -54,6 +60,9 @@ final class StubServer implements AutoCloseable {
                     }
                 }
             }
+        }
+        if (path.endsWith("/token")) {
+            return new Reply(200, "{\"access_token\":\"" + ACCESS_TOKEN + "\",\"token_type\":\"Bearer\",\"expires_in\":300}");
         }
         return new Reply(200, "{\"ok\":true,\"result\":true}");
     }

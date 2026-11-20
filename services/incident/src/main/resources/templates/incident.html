@@ -16,14 +16,18 @@
     </p>
     <p class="muted">Incident <code th:text="${i.id()}">id</code> · opened <time th:text="${i.createdAt()}">time</time></p>
 
-    <div class="actions" th:if="${i.status().isOpen()}">
+    <div class="actions" th:if="${i.status().isOpen() and canRespond}">
         <form th:if="${i.status().name() == 'TRIGGERED'}" method="post" th:action="@{/ui/incidents/{id}/acknowledge(id=${i.id()})}">
+            <input type="hidden" name="_csrf" th:value="${csrfToken}">
             <button class="primary" type="submit">Acknowledge</button>
         </form>
         <form method="post" th:action="@{/ui/incidents/{id}/resolve(id=${i.id()})}">
+            <input type="hidden" name="_csrf" th:value="${csrfToken}">
             <button type="submit">Resolve</button>
         </form>
     </div>
+
+    <p class="muted" th:if="${i.status().isOpen() and !canRespond}">You can view incidents. Ask an admin for the responder role to acknowledge or resolve them.</p>
 
     <h2>Timeline</h2>
     <div class="table-wrap">

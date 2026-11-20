@@ -24,6 +24,7 @@ class IncidentUiIT extends IntegrationTest {
     private Environment environment;
 
     private final HttpClient http = HttpClient.newBuilder().cookieHandler(new CookieManager()).build();
+    private final String alice = TOKENS.person("alice", "responder");
 
     private UUID open(String summary) {
         String fingerprint = newFingerprint();
@@ -66,10 +67,11 @@ class IncidentUiIT extends IntegrationTest {
 
         HttpResponse<String> ack = post("/ui/incidents/" + id + "/acknowledge");
         assertThat(ack.statusCode()).isEqualTo(302);
-        assertThat(ack.headers().firstValue("Location")).hasValueSatisfying(l -> assertThat(l).endsWith("/ui/incidents/" + id));
+        assertThat(ack.headers().firstValue("Location")).as("relative, so it works through the gateway")
+                .hasValue("/ui/incidents/" + id);
         assertThat(service.get(id).status()).isEqualTo(IncidentStatus.ACKNOWLEDGED);
         String after = get("/ui/incidents/" + id).body();
-        assertThat(after).contains("Incident acknowledged.").contains("Acknowledged by web");
+        assertThat(after).contains("Incident acknowledged.").contains("Acknowledged by alice");
 
         HttpResponse<String> again = post("/ui/incidents/" + id + "/acknowledge");
         assertThat(again.statusCode()).isEqualTo(302);
@@ -86,11 +88,13 @@ class IncidentUiIT extends IntegrationTest {
     }
 
     private HttpResponse<String> get(String path) throws IOException, InterruptedException {
-        return http.send(HttpRequest.newBuilder(uri(path)).GET().build(), HttpResponse.BodyHandlers.ofString());
+        return http.send(HttpRequest.newBuilder(uri(path)).header("Authorization", "Bearer " + alice).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> post(String path) throws IOException, InterruptedException {
-        return http.send(HttpRequest.newBuilder(uri(path)).header("Content-Type", "application/x-www-form-urlencoded")
+        return http.send(HttpRequest.newBuilder(uri(path)).header("Authorization", "Bearer " + alice)
+                .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
     }
 

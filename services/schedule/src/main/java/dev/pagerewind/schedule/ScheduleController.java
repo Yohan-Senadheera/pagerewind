@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,7 +34,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Configuration API for people, teams, rotations and escalation policies. */
+/** Configuration API for people, teams, rotations and escalation policies. Changes need the admin role. */
 @RestController
 @RequestMapping("/v1")
 public class ScheduleController {
@@ -58,6 +59,7 @@ public class ScheduleController {
     public record ContactRequest(@NotNull Contact.Channel channel, @NotBlank @Size(max = 320) String address) {
     }
 
+    @PreAuthorize("hasRole(\'admin\')")
     @PutMapping("/people/{id}")
     @Transactional
     public Person putPerson(@PathVariable @Pattern(regexp = ID) String id, @Valid @RequestBody PersonRequest request) {
@@ -76,7 +78,9 @@ public class ScheduleController {
         return directory.findPerson(id).orElseThrow();
     }
 
+    /** Contact details are personal data, so only responders and admins see them. */
     @GetMapping("/people")
+    @PreAuthorize("hasRole('responder')")
     public List<Person> people() {
         return directory.findPeople();
     }
@@ -93,6 +97,7 @@ public class ScheduleController {
     public record TeamView(Team team, List<String> services, List<RotationView> rotations, List<EscalationStep> policy) {
     }
 
+    @PreAuthorize("hasRole(\'admin\')")
     @PutMapping("/teams/{id}")
     @Transactional
     public TeamView putTeam(@PathVariable @Pattern(regexp = ID) String id, @Valid @RequestBody TeamRequest request) {
@@ -124,6 +129,7 @@ public class ScheduleController {
             @NotNull @Min(1) @Max(672) Integer shiftHours) {
     }
 
+    @PreAuthorize("hasRole(\'admin\')")
     @PutMapping("/teams/{teamId}/rotations/{id}")
     @Transactional
     public Rotation putRotation(@PathVariable String teamId, @PathVariable @Pattern(regexp = ID) String id,
@@ -152,6 +158,7 @@ public class ScheduleController {
     public record OverrideRequest(@NotBlank String personId, @NotNull Instant start, @NotNull Instant end) {
     }
 
+    @PreAuthorize("hasRole(\'admin\')")
     @PostMapping("/teams/{teamId}/rotations/{id}/overrides")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
@@ -189,6 +196,7 @@ public class ScheduleController {
             @NotBlank String targetId) {
     }
 
+    @PreAuthorize("hasRole(\'admin\')")
     @PutMapping("/teams/{teamId}/escalation-policy")
     @Transactional
     public List<EscalationStep> putPolicy(@PathVariable String teamId, @Valid @RequestBody PolicyRequest request) {

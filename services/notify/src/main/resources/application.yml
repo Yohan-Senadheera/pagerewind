@@ -32,6 +32,18 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  security:
+    oauth2:
+      client:
+        registration:
+          notify-svc:
+            provider: keycloak
+            client-id: notify-svc
+            client-secret: ${NOTIFY_CLIENT_SECRET:}
+            authorization-grant-type: client_credentials
+        provider:
+          keycloak:
+            token-uri: ${PAGEREWIND_AUTH_TOKEN_URI:http://localhost:8180/realms/pagerewind/protocol/openid-connect/token}
 
 server:
   port: 8084

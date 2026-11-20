@@ -13,6 +13,7 @@ import dev.pagerewind.events.PageRequested;
 import dev.pagerewind.events.PageRewindEvent;
 import dev.pagerewind.events.Severity;
 import dev.pagerewind.messaging.OutboxRelay;
+import dev.pagerewind.security.TestJwts;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -41,6 +42,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -71,6 +74,12 @@ class ScheduleIT {
     private Environment environment;
 
     private final HttpClient http = HttpClient.newHttpClient();
+    private final String adminToken = TestJwts.get().person("root", "admin");
+
+    @DynamicPropertySource
+    static void tokenChecks(DynamicPropertyRegistry registry) {
+        TestJwts.register(registry);
+    }
 
     @BeforeEach
     void reset() throws Exception {
@@ -324,7 +333,7 @@ class ScheduleIT {
         put("/v1/people/eve", "{\"name\":\"<img src=x onerror=alert(1)>\",\"contacts\":[]}", 200);
         put("/v1/teams/ops", "{\"name\":\"Ops <b>team</b>\",\"services\":[\"checkout\"]}", 200);
 
-        String page = get("/ui", 200);
+        String page = get("/ui/schedules", 200);
 
         assertThat(page).contains("Who is on call").contains("Primary").contains(">alice<").contains("alice, carol")
                 .contains("Services: checkout").contains("On call in primary, then wait 2 min")
@@ -392,6 +401,41 @@ class ScheduleIT {
         return pages.getFirst();
     }
 
+    // ---- who may do what
+
+    @Test
+    void onlyAdminsChangeTheSetupAndOnlyRespondersSeeContactDetails() throws Exception {
+        String viewer = TestJwts.get().person("vera", "viewer");
+        String responder = TestJwts.get().person("alice", "responder");
+        String team = "{\"name\":\"Hijacked\",\"services\":[\"checkout\"]}";
+
+        assertThat(call("GET", "/v1/teams/ops", null, null)).isEqualTo(401);
+        assertThat(call("PUT", "/v1/teams/ops", null, team)).isEqualTo(401);
+        assertThat(call("GET", "/v1/teams/ops", viewer, null)).isEqualTo(200);
+        assertThat(call("GET", "/v1/teams/ops/on-call", viewer, null)).isEqualTo(200);
+        assertThat(call("GET", "/v1/people", viewer, null)).isEqualTo(403);
+        assertThat(call("GET", "/v1/people", responder, null)).isEqualTo(200);
+        assertThat(call("PUT", "/v1/teams/ops", viewer, team)).isEqualTo(403);
+        assertThat(call("PUT", "/v1/teams/ops", responder, team)).isEqualTo(403);
+        assertThat(call("PUT", "/v1/people/mallory", responder, "{\"name\":\"Mallory\"}")).isEqualTo(403);
+        assertThat(call("GET", "/ui/schedules", viewer, null)).isEqualTo(200);
+        assertThat(call("GET", "/actuator/health/readiness", null, null)).isEqualTo(200);
+
+        assertThat(get("/v1/teams/ops", 200)).contains("Operations").doesNotContain("Hijacked");
+    }
+
+    private int call(String method, String path, String token, String json) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path));
+        if (token != null) {
+            request.header("Authorization", "Bearer " + token);
+        }
+        if (json != null) {
+            request.header("Content-Type", "application/json");
+        }
+        request.method(method, json == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(json));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString()).statusCode();
+    }
+
     private List<PageRequested> drainPages() {
         while (relay.relayOnce() > 0) {
             // keep going until the outbox is empty
@@ -406,17 +450,17 @@ class ScheduleIT {
     }
 
     private String get(String path, int expectedStatus) {
-        return send(HttpRequest.newBuilder(uri(path)).GET().build(), expectedStatus);
+        return send(HttpRequest.newBuilder(uri(path)).header("Authorization", "Bearer " + adminToken).GET().build(), expectedStatus);
     }
 
     private String put(String path, String body, int expectedStatus) {
-        return send(HttpRequest.newBuilder(uri(path)).header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(body)).build(), expectedStatus);
+        return send(HttpRequest.newBuilder(uri(path)).header("Authorization", "Bearer " + adminToken)
+                .header("Content-Type", "application/json").PUT(HttpRequest.BodyPublishers.ofString(body)).build(), expectedStatus);
     }
 
     private String post(String path, String body, int expectedStatus) {
-        return send(HttpRequest.newBuilder(uri(path)).header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body)).build(), expectedStatus);
+        return send(HttpRequest.newBuilder(uri(path)).header("Authorization", "Bearer " + adminToken)
+                .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), expectedStatus);
     }
 
     private String send(HttpRequest request, int expectedStatus) {
