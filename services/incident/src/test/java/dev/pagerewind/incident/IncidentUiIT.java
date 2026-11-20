@@ -67,7 +67,8 @@ class IncidentUiIT extends IntegrationTest {
 
         HttpResponse<String> ack = post("/ui/incidents/" + id + "/acknowledge");
         assertThat(ack.statusCode()).isEqualTo(302);
-        assertThat(ack.headers().firstValue("Location")).hasValueSatisfying(l -> assertThat(l).endsWith("/ui/incidents/" + id));
+        assertThat(ack.headers().firstValue("Location")).as("relative, so it works through the gateway")
+                .hasValue("/ui/incidents/" + id);
         assertThat(service.get(id).status()).isEqualTo(IncidentStatus.ACKNOWLEDGED);
         String after = get("/ui/incidents/" + id).body();
         assertThat(after).contains("Incident acknowledged.").contains("Acknowledged by alice");

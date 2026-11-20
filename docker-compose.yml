@@ -1,12 +1,12 @@
-# PageRewind quickstart: every service plus PostgreSQL, RabbitMQ, Redis and Mailpit.
+# PageRewind quickstart: every service plus Keycloak, PostgreSQL, RabbitMQ, Redis and Mailpit.
 #
-#   cp .env.example .env        # then change the secrets in .env
+#   cp .env.example .env        # then change every "change-me" in .env
 #   docker compose up -d
-#   ./scripts/seed-demo.sh      # a demo team, rotation and escalation policy
+#   ./scripts/seed-demo.sh      # demo logins, team, rotation and escalation policy
 #   ./scripts/send-test-alert.sh
 #
-# Then open the incident UI at http://localhost:8082/ui and the inbox at http://localhost:8025.
-# All ports are bound to 127.0.0.1. This release has no login yet: do not expose these ports.
+# Then sign in at http://localhost:8080 (alice, bob or vera, with DEMO_PASSWORD from .env) and open the
+# inbox at http://localhost:8025. All ports are bound to 127.0.0.1.
 name: pagerewind
 
 x-service: &service
@@ -19,6 +19,9 @@ x-service: &service
     SPRING_RABBITMQ_HOST: rabbitmq
     SPRING_RABBITMQ_USERNAME: pagerewind
     SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}
+    # Tokens name Keycloak by its public address; the services fetch its keys over the Compose network.
+    PAGEREWIND_AUTH_ISSUER: http://localhost:8180/realms/pagerewind
+    PAGEREWIND_AUTH_JWKS: http://keycloak:8080/realms/pagerewind/protocol/openid-connect/certs
     LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
   depends_on: &service-deps
     postgres:
@@ -27,9 +30,31 @@ x-service: &service
       condition: service_healthy
 
 services:
+  gateway:
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-gateway:${PAGEREWIND_VERSION:-main}
+    restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      PAGEREWIND_AUTH_ISSUER: http://localhost:8180/realms/pagerewind
+      PAGEREWIND_AUTH_BACKCHANNEL: http://keycloak:8080/realms/pagerewind
+      PAGEREWIND_WEB_CLIENT_SECRET: ${PAGEREWIND_WEB_CLIENT_SECRET:?set PAGEREWIND_WEB_CLIENT_SECRET in .env}
+      SPRING_DATA_REDIS_HOST: redis
+      INCIDENT_URL: http://incident:8080
+      SCHEDULE_URL: http://schedule:8080
+      INGEST_URL: http://ingest:8080
+      NOTIFY_URL: http://notify:8080
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+
   ingest:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-ingest:${PAGEREWIND_VERSION:-0.1.0}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-ingest:${PAGEREWIND_VERSION:-main}
     environment:
       <<: *service-env
       SPRING_DATA_REDIS_HOST: redis
@@ -44,24 +69,26 @@ services:
 
   incident:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-incident:${PAGEREWIND_VERSION:-0.1.0}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-incident:${PAGEREWIND_VERSION:-main}
     ports:
       - "127.0.0.1:8082:8080"
 
   schedule:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-schedule:${PAGEREWIND_VERSION:-0.1.0}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-schedule:${PAGEREWIND_VERSION:-main}
     ports:
       - "127.0.0.1:8083:8080"
 
   notify:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-notify:${PAGEREWIND_VERSION:-0.1.0}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-notify:${PAGEREWIND_VERSION:-main}
     environment:
       <<: *service-env
       INCIDENT_BASE_URL: http://incident:8080
       NOTIFY_PUBLIC_BASE_URL: http://localhost:8084
       NOTIFY_ACTION_LINK_SECRET: ${ACTION_LINK_SECRET:?set ACTION_LINK_SECRET in .env}
+      NOTIFY_CLIENT_SECRET: ${NOTIFY_CLIENT_SECRET:?set NOTIFY_CLIENT_SECRET in .env}
+      PAGEREWIND_AUTH_TOKEN_URI: http://keycloak:8080/realms/pagerewind/protocol/openid-connect/token
       NOTIFY_EMAIL_FROM: pagerewind@localhost
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: "1025"
@@ -72,13 +99,41 @@ services:
 
   status:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-status:${PAGEREWIND_VERSION:-0.1.0}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-status:${PAGEREWIND_VERSION:-main}
     environment:
       <<: *service-env
       STATUS_PAGE_TITLE: Demo status
       STATUS_SERVICES: checkout,payments
     ports:
       - "127.0.0.1:8085:8080"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    # Development mode keeps its data inside the container; ./scripts/seed-demo.sh recreates the demo logins.
+    command: ["start-dev", "--import-realm"]
+    restart: unless-stopped
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+      PAGEREWIND_URL: http://localhost:8080
+      PAGEREWIND_WEB_CLIENT_SECRET: ${PAGEREWIND_WEB_CLIENT_SECRET:?set PAGEREWIND_WEB_CLIENT_SECRET in .env}
+      NOTIFY_CLIENT_SECRET: ${NOTIFY_CLIENT_SECRET:?set NOTIFY_CLIENT_SECRET in .env}
+      AUTOMATION_CLIENT_SECRET: ${AUTOMATION_CLIENT_SECRET:?set AUTOMATION_CLIENT_SECRET in .env}
+    volumes:
+      - ./deploy/keycloak/pagerewind-realm.json:/opt/keycloak/data/import/pagerewind-realm.json:ro
+    ports:
+      - "127.0.0.1:8180:8080"
+    healthcheck:
+      # The image has no curl; ask the management port with bash.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+    mem_limit: 1g
 
   postgres:
     image: postgres:17-alpine

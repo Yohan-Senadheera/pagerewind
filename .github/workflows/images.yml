@@ -52,7 +52,7 @@ jobs:
         run: |
           owner=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
           short_sha=${GITHUB_SHA::7}
-          for service in ingest incident schedule notify status; do
+          for service in gateway ingest incident schedule notify status; do
             image="ghcr.io/$owner/pagerewind-$service"
             tags=("$image:sha-$short_sha")
             if [ "$REF_TYPE" = "tag" ]; then

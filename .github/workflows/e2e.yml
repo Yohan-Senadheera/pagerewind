@@ -10,6 +10,7 @@ on:
       - "docker-compose.yml"
       - ".env.example"
       - "scripts/*.sh"
+      - "deploy/keycloak/**"
       - ".github/workflows/e2e.yml"
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - "docker-compose.yml"
       - ".env.example"
       - "scripts/*.sh"
+      - "deploy/keycloak/**"
       - ".github/workflows/e2e.yml"
   workflow_dispatch:
 
@@ -46,14 +48,15 @@ jobs:
 
       - name: Build images
         run: |
-          for service in ingest incident schedule notify status; do
+          for service in gateway ingest incident schedule notify status; do
             docker build --build-arg SERVICE="$service" -t "local/pagerewind-$service:e2e" .
           done
 
       - name: Start the quickstart
         run: |
           cp .env.example .env
-          for key in POSTGRES_PASSWORD RABBITMQ_PASSWORD INGEST_TOKEN ACTION_LINK_SECRET; do
+          for key in POSTGRES_PASSWORD RABBITMQ_PASSWORD INGEST_TOKEN ACTION_LINK_SECRET KEYCLOAK_ADMIN_PASSWORD \
+              PAGEREWIND_WEB_CLIENT_SECRET NOTIFY_CLIENT_SECRET AUTOMATION_CLIENT_SECRET DEMO_PASSWORD; do
             sed -i "s/^$key=.*/$key=$(openssl rand -hex 16)/" .env
           done
           sed -i 's/^PAGEREWIND_VERSION=.*/PAGEREWIND_VERSION=e2e/' .env

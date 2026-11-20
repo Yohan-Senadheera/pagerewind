@@ -37,6 +37,9 @@ spring:
           audiences: pagerewind-api
 
 server:
+  tomcat:
+    # Pages are served through the gateway: redirect with a path, never with this service's own address.
+    use-relative-redirects: true
   port: 8082
   shutdown: graceful
   servlet:

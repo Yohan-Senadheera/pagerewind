@@ -6,6 +6,7 @@ on:
       - "libs/**"
       - "services/**"
       - "pom.xml"
+      - "deploy/keycloak/**"
       - ".mvn/**"
       - "mvnw"
       - ".github/workflows/java-ci.yml"
