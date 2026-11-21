@@ -29,8 +29,9 @@ data "aws_iam_policy_document" "scheduler_assume" {
   }
 }
 
+# Shared by this nightly stop and by the session timer that "pagerewind.ps1 start" sets.
 resource "aws_iam_role" "nightly_stop" {
-  name               = "pagerewind-nightly-stop"
+  name               = "pagerewind-auto-stop"
   description        = "Lets EventBridge Scheduler stop the PageRewind nodes"
   assume_role_policy = data.aws_iam_policy_document.scheduler_assume.json
 }
