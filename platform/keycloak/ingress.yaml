@@ -1,0 +1,33 @@
+# Public paths only: logins, tokens and keys under /realms, and the login page's styles under /resources.
+# The admin console and API (/admin) stay inside the cluster; open them with:
+#   kubectl -n keycloak port-forward svc/keycloak-service 8180:8080   (then http://localhost:8180/admin)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - auth.pagerewind.dev
+      secretName: keycloak-tls
+  rules:
+    - host: auth.pagerewind.dev
+      http:
+        paths:
+          - path: /realms/
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak-service
+                port:
+                  number: 8080
+          - path: /resources/
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak-service
+                port:
+                  number: 8080

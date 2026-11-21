@@ -1,0 +1,37 @@
+# The Keycloak server, run by the Keycloak operator. TLS ends at Traefik (ingress.yaml), so Keycloak serves
+# plain HTTP inside the cluster and trusts X-Forwarded-* from Traefik for its public address.
+apiVersion: k8s.keycloak.org/v2beta1
+kind: Keycloak
+metadata:
+  name: keycloak
+spec:
+  instances: 1
+  db:
+    vendor: postgres
+    host: keycloak-db-rw
+    port: 5432
+    database: keycloak
+    usernameSecret:
+      name: keycloak-db-app
+      key: username
+    passwordSecret:
+      name: keycloak-db-app
+      key: password
+  http:
+    httpEnabled: true
+  hostname:
+    hostname: https://auth.pagerewind.dev
+    strict: true
+  proxy:
+    headers: xforwarded
+  # Our own Ingress (ingress.yaml) publishes only the paths browsers and apps need.
+  ingress:
+    enabled: false
+  serviceMonitor:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 700Mi
+    limits:
+      memory: 1Gi

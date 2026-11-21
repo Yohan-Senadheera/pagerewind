@@ -7,6 +7,8 @@ on:
       - "services/**"
       - "pom.xml"
       - "deploy/keycloak/**"
+      - "platform/keycloak/**"
+      - "scripts/render-realm-import.py"
       - ".mvn/**"
       - "mvnw"
       - ".github/workflows/java-ci.yml"
@@ -32,6 +34,9 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+
+      - name: Realm import matches the realm file
+        run: python3 scripts/render-realm-import.py --check
 
       - name: Unit and integration tests (Testcontainers)
         run: ./mvnw -B -ntp verify
