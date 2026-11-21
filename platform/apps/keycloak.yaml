@@ -1,0 +1,22 @@
+# Keycloak and its database in namespace "keycloak". Grows step by step: database, operator, server, realm.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keycloak
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Yohan-Senadheera/pagerewind.git
+    targetRevision: main
+    path: platform/keycloak
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: keycloak
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

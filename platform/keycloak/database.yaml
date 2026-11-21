@@ -1,0 +1,26 @@
+# PostgreSQL for Keycloak, run by the CloudNativePG operator.
+# The operator creates the pod, the disk, and the Secret "keycloak-db-app" (username and password of the
+# owner "keycloak"), plus the Service "keycloak-db-rw" that always points at the primary.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: keycloak-db
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.6
+  storage:
+    size: 2Gi
+  bootstrap:
+    initdb:
+      database: keycloak
+      owner: keycloak
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  postgresql:
+    parameters:
+      shared_buffers: 64MB
+      max_connections: "50"
