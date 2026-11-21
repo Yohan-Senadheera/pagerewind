@@ -124,7 +124,7 @@ still arrived exactly on time, because escalation timers live in PostgreSQL, not
 
 The project also runs on a two-node k3s cluster on AWS, built with Terraform and managed with Argo CD
 (GitOps) and cert-manager (Let's Encrypt). CI holds no AWS credentials. To save cost, an EventBridge Scheduler job stops
-both nodes every night at 02:00 (Asia/Colombo). See [infra/](infra/),
+both nodes every night at 04:00 (Asia/Colombo). See [infra/](infra/),
 [platform/](platform/) and `scripts/pagerewind.ps1`.
 
 ## Roadmap
