@@ -8,8 +8,10 @@
     down    Destroy the cluster and network. Keeps the Terraform state bucket and the Elastic IP
             (so DNS stays valid). Add -ReleaseIp to release the IP as well.
     stop    Stop both nodes (disks and IP stay; almost no cost).
-    start   Start both nodes again.
-    status  Show nodes and Argo CD applications.
+    start   Start both nodes again. AWS stops them again after -Hours (default 4), even if this laptop is
+            off; use -Hours 0 for no timer. A nightly stop at 04:00 runs as well (infra/reference).
+    extend  Move the automatic stop to -Hours from now (default 4).
+    status  Show nodes, the automatic stop time and Argo CD applications.
     kubeconfig  Fetch the cluster admin kubeconfig again.
 
     Needs: aws (logged in with 'aws login --profile pager'), terraform, kubectl, helm, ssh,
@@ -18,12 +20,17 @@
 .EXAMPLE
     ./scripts/pagerewind.ps1 up
 .EXAMPLE
+    ./scripts/pagerewind.ps1 start -Hours 6
+.EXAMPLE
     ./scripts/pagerewind.ps1 down
 #>
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('up', 'down', 'stop', 'start', 'status', 'kubeconfig')]
+    [ValidateSet('up', 'down', 'stop', 'start', 'extend', 'status', 'kubeconfig')]
     [string]$Command,
+
+    [ValidateRange(0, 24)]
+    [double]$Hours = 4,
 
     [switch]$ReleaseIp,
     [switch]$Force
@@ -39,6 +46,8 @@ $ArgoChartVersion = '10.18.0'
 $Kubeconfig = Join-Path $HOME '.kube\pagerewind'
 $SshKey = Join-Path $HOME '.ssh\pagerewind'
 $KnownHosts = Join-Path $HOME '.ssh\known_hosts_pagerewind'
+$SessionStop = 'pagerewind-session-stop'
+$StopRole = 'pagerewind-auto-stop'
 
 function Assert-Success([string]$What) {
     if ($LASTEXITCODE -ne 0) { throw "$What failed (exit code $LASTEXITCODE)" }
@@ -98,6 +107,57 @@ function Get-InstanceIds {
         --query 'Reservations[].Instances[].InstanceId' --output text
     Assert-Success 'listing instances'
     return @($ids -split '\s+' | Where-Object { $_ })
+}
+
+# One-time EventBridge Scheduler job that stops the nodes $Hours from now, then deletes itself.
+# It runs in AWS, so the nodes stop even if this laptop is off or the AWS login has expired.
+function Set-SessionStop([string[]]$Ids) {
+    Remove-SessionStop
+    if ($Hours -eq 0) { Write-Host 'No automatic stop for this session (the nightly stop still runs).'; return }
+    $roleArn = aws iam get-role --profile $AwsProfile --role-name $StopRole --query 'Role.Arn' --output text
+    Assert-Success "reading role $StopRole (apply infra/reference first)"
+    $at = (Get-Date).ToUniversalTime().AddHours($Hours)
+    $request = @{
+        Name                       = $SessionStop
+        Description                = 'Stop the PageRewind nodes at the end of this work session'
+        ScheduleExpression         = "at($($at.ToString('yyyy-MM-ddTHH:mm:ss')))"
+        ScheduleExpressionTimezone = 'UTC'
+        FlexibleTimeWindow         = @{ Mode = 'OFF' }
+        ActionAfterCompletion      = 'DELETE'
+        Target                     = @{
+            Arn         = 'arn:aws:scheduler:::aws-sdk:ec2:stopInstances'
+            RoleArn     = $roleArn.Trim()
+            Input       = (@{ InstanceIds = $Ids } | ConvertTo-Json -Compress)
+            RetryPolicy = @{ MaximumRetryAttempts = 3 }
+        }
+    } | ConvertTo-Json -Depth 5
+    $file = [IO.Path]::GetTempFileName()
+    try {
+        Set-Content -Encoding ascii -Path $file -Value $request
+        aws scheduler create-schedule --profile $AwsProfile --cli-input-json "file://$file" --output text | Out-Null
+        Assert-Success 'creating the automatic stop'
+    } finally {
+        Remove-Item $file -Force
+    }
+    Write-Host "The nodes stop automatically at $($at.ToLocalTime().ToString('HH:mm')) ($Hours h). Change it with: .\scripts\pagerewind.ps1 extend -Hours <n>"
+}
+
+function Remove-SessionStop {
+    if (Test-NativeCommand { aws scheduler get-schedule --profile $AwsProfile --name $SessionStop }) {
+        aws scheduler delete-schedule --profile $AwsProfile --name $SessionStop | Out-Null
+        Assert-Success 'removing the automatic stop'
+    }
+}
+
+function Show-SessionStop {
+    $ErrorActionPreference = 'Continue'
+    $expression = aws scheduler get-schedule --profile $AwsProfile --name $SessionStop --query 'ScheduleExpression' --output text 2>$null
+    if ($LASTEXITCODE -eq 0 -and $expression -match 'at\((.+)\)') {
+        $at = [DateTime]::SpecifyKind([DateTime]::Parse($Matches[1]), 'Utc').ToLocalTime()
+        Write-Host "Automatic stop at $($at.ToString('yyyy-MM-dd HH:mm')) (plus the nightly stop)."
+    } else {
+        Write-Host 'No session timer; only the nightly stop applies.'
+    }
 }
 
 function Invoke-Ssh([string]$Ip, [string]$RemoteCommand) {
@@ -170,6 +230,7 @@ switch ($Command) {
         Save-Kubeconfig $ip
         Install-ArgoCd
         Wait-ForTestPage
+        Set-SessionStop (Get-InstanceIds)
         Write-Step 'Done'
         Write-Host "Use the cluster:   `$env:KUBECONFIG = `"$Kubeconfig`""
         Write-Host 'Argo CD UI:        kubectl port-forward svc/argocd-server -n argocd 8080:80  (then http://localhost:8080)'
@@ -200,6 +261,7 @@ switch ($Command) {
         if ($ids.Count -eq 0) { Write-Host 'No nodes found.'; return }
         aws ec2 stop-instances --profile $AwsProfile --instance-ids @ids --output text | Out-Null
         Assert-Success 'stop-instances'
+        Remove-SessionStop
         Write-Host "Stopping $($ids -join ', ')."
     }
     'start' {
@@ -211,11 +273,19 @@ switch ($Command) {
         aws ec2 wait instance-running --profile $AwsProfile --instance-ids @ids
         Assert-Success 'waiting for instances'
         Wait-ForCluster (Get-ServerIp)
+        Set-SessionStop $ids
+    }
+    'extend' {
+        Assert-Prerequisites
+        $ids = Get-InstanceIds
+        if ($ids.Count -eq 0) { Write-Host 'No nodes found.'; return }
+        Set-SessionStop $ids
     }
     'status' {
         Assert-Prerequisites
         aws ec2 describe-instances --profile $AwsProfile --filters 'Name=tag:Project,Values=pagerewind' `
             --query "Reservations[].Instances[].[Tags[?Key=='Name']|[0].Value,State.Name,InstanceType]" --output table
+        Show-SessionStop
         if (Test-Path $Kubeconfig) {
             $env:KUBECONFIG = $Kubeconfig
             kubectl get nodes
