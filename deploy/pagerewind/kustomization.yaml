@@ -16,6 +16,7 @@ resources:
   - notify.yaml
   - status.yaml
   - gateway.yaml
+  - external-secret.yaml
   - ingress.yaml
 # One version for every PageRewind image. sha-d4ded3b is main after #27 (logins, roles, gateway).
 images:
