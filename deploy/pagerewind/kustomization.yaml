@@ -16,19 +16,22 @@ resources:
   - notify.yaml
   - status.yaml
   - gateway.yaml
+  - capture.yaml
   - external-secret.yaml
   - ingress.yaml
-# One version for every PageRewind image. sha-d4ded3b is main after #27 (logins, roles, gateway).
+# One version for every PageRewind image. sha-2f82946 is main after #48 (capture, evidence on incidents).
 images:
   - name: ghcr.io/yohan-senadheera/pagerewind-gateway
-    newTag: sha-d4ded3b
+    newTag: sha-2f82946
   - name: ghcr.io/yohan-senadheera/pagerewind-ingest
-    newTag: sha-d4ded3b
+    newTag: sha-2f82946
   - name: ghcr.io/yohan-senadheera/pagerewind-incident
-    newTag: sha-d4ded3b
+    newTag: sha-2f82946
   - name: ghcr.io/yohan-senadheera/pagerewind-schedule
-    newTag: sha-d4ded3b
+    newTag: sha-2f82946
   - name: ghcr.io/yohan-senadheera/pagerewind-notify
-    newTag: sha-d4ded3b
+    newTag: sha-2f82946
   - name: ghcr.io/yohan-senadheera/pagerewind-status
-    newTag: sha-d4ded3b
+    newTag: sha-2f82946
+  - name: ghcr.io/yohan-senadheera/pagerewind-capture
+    newTag: sha-2f82946

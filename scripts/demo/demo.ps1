@@ -9,13 +9,16 @@
     alert     Send a firing alert for "checkout" to https://ingest.<domain>.
     resolve   Send the matching "resolved" alert.
     status    Show the escalation jobs of the newest incident.
+    bad-deploy  Break the demo "checkout" app (namespace demo): a new image and command that logs errors
+              and crashes. The flight recorder sees the change and the error lines.
+    fix-deploy  Roll the demo app back to the version before bad-deploy.
 
     Secrets are read from the cluster and never printed. The incident and schedule APIs need a Keycloak
     token; seed and status get one with the pagerewind-automation client (admin role).
 #>
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('seed', 'webhook', 'alert', 'resolve', 'status')]
+    [ValidateSet('seed', 'webhook', 'alert', 'resolve', 'status', 'bad-deploy', 'fix-deploy')]
     [string]$Command
 )
 
@@ -67,7 +70,9 @@ function Send-Alert([string]$Status) {
         commonLabels = @{ alertname = 'HighErrorRate' }
         alerts       = @(@{
                 status      = $Status
-                labels      = @{ alertname = 'HighErrorRate'; service = 'checkout'; severity = 'critical' }
+                # namespace and deployment tell the flight recorder which workload the alert is about.
+                labels      = @{ alertname = 'HighErrorRate'; service = 'checkout'; severity = 'critical';
+                    namespace = 'demo'; deployment = 'checkout' }
                 annotations = @{ summary = 'Checkout 5xx rate above 5% for 5 minutes' }
                 startsAt    = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
                 fingerprint = 'live-demo-checkout-5xx'
@@ -111,6 +116,27 @@ switch ($Command) {
             -ContentType 'application/json' -Body $body
         $botToken = $null
         Write-Host "Telegram setWebhook: ok=$($result.ok) $($result.description)"
+    }
+    'bad-deploy' {
+        $script = 'for i in 1 2 3 4; do echo "checkout: ERROR payment provider timed out after 3000 ms (boom)"; sleep 5; done; exit 1'
+        $patch = @(
+            @{ op = 'replace'; path = '/spec/template/spec/containers/0/image'; value = 'busybox:1.36' }
+            @{ op = 'replace'; path = '/spec/template/spec/containers/0/args'; value = @($script) }
+        ) | ConvertTo-Json -Depth 5 -Compress
+        $file = [IO.Path]::GetTempFileName()
+        try {
+            Set-Content -Encoding ascii -Path $file -Value $patch
+            kubectl -n demo patch deployment checkout --type=json --patch-file $file | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'Patching the demo deployment failed' }
+        } finally {
+            Remove-Item $file -Force
+        }
+        Write-Host 'Deployed a broken checkout (busybox:1.36 that logs errors and crashes). Send an alert in about 30 seconds.'
+    }
+    'fix-deploy' {
+        kubectl -n demo rollout undo deployment/checkout | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Rolling back the demo deployment failed' }
+        Write-Host 'Rolled checkout back to the previous version.'
     }
     'alert' { Send-Alert 'firing' }
     'resolve' { Send-Alert 'resolved' }

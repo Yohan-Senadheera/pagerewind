@@ -57,6 +57,8 @@ spec:
               value: "http://ingest"
             - name: NOTIFY_URL
               value: "http://notify"
+            - name: CAPTURE_URL
+              value: "http://capture"
             # Behind Traefik, which ends TLS and sets X-Forwarded-*.
             - name: FORWARD_HEADERS_STRATEGY
               value: "framework"
