@@ -11,6 +11,8 @@ public record TimelineEntry(long id, Type type, String message, String actor, Ma
         ALERT_RESOLVED,
         ACKNOWLEDGED,
         RESOLVED,
-        NOTE
+        NOTE,
+        /** The flight recorder froze logs and recent changes for this incident. */
+        EVIDENCE
     }
 }

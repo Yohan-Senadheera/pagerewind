@@ -38,7 +38,12 @@ public class IncidentUiController {
     @GetMapping("/incidents/{id}")
     public String detail(@PathVariable UUID id, Model model) {
         model.addAttribute("incident", service.get(id));
-        model.addAttribute("timeline", service.timeline(id));
+        List<TimelineEntry> timeline = service.timeline(id);
+        model.addAttribute("timeline", timeline);
+        // The newest evidence, if the flight recorder captured any for this incident.
+        model.addAttribute("evidence", timeline.stream()
+                .filter(e -> e.type() == TimelineEntry.Type.EVIDENCE)
+                .reduce((first, second) -> second).orElse(null));
         return "incident";
     }
 

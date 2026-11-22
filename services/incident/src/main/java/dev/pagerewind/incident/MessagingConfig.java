@@ -59,4 +59,29 @@ class MessagingConfig {
     Binding alertsDeadLetterBinding() {
         return BindingBuilder.bind(alertsDeadLetterQueue()).to(deadLetterExchange()).with(properties.alertsQueue());
     }
+
+    @Bean
+    Queue evidenceQueue() {
+        return QueueBuilder.durable(properties.evidenceQueue())
+                .quorum()
+                .deliveryLimit(properties.deliveryLimit())
+                .deadLetterExchange(Messaging.DEAD_LETTER_EXCHANGE)
+                .deadLetterRoutingKey(properties.evidenceQueue())
+                .build();
+    }
+
+    @Bean
+    Queue evidenceDeadLetterQueue() {
+        return QueueBuilder.durable(properties.evidenceDeadLetterQueue()).quorum().build();
+    }
+
+    @Bean
+    Binding evidenceBinding() {
+        return BindingBuilder.bind(evidenceQueue()).to(eventsExchange()).with(EventType.EVIDENCE_CAPTURED.routingKey());
+    }
+
+    @Bean
+    Binding evidenceDeadLetterBinding() {
+        return BindingBuilder.bind(evidenceDeadLetterQueue()).to(deadLetterExchange()).with(properties.evidenceQueue());
+    }
 }

@@ -2,6 +2,7 @@ package dev.pagerewind.incident;
 
 import dev.pagerewind.events.AlertReceived;
 import dev.pagerewind.events.AlertStatus;
+import dev.pagerewind.events.EvidenceCaptured;
 import dev.pagerewind.events.IncidentAcknowledged;
 import dev.pagerewind.events.IncidentResolved;
 import dev.pagerewind.events.IncidentTriggered;
@@ -13,6 +14,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -172,6 +174,29 @@ public class IncidentService {
     public void addNote(UUID id, String actor, String text) {
         incidents.findById(id).orElseThrow(() -> new IncidentErrors.NotFound(id));
         timeline.add(id, TimelineEntry.Type.NOTE, text.trim(), actor, Map.of(), clock.instant());
+    }
+
+    /**
+     * Adds the flight recorder's findings to the timeline, once per event. Evidence for an incident that
+     * does not exist (deleted, or another installation) is ignored.
+     */
+    @Transactional
+    public void recordEvidence(EvidenceCaptured evidence) {
+        Instant now = clock.instant();
+        if (!processed.markProcessed(evidence.eventId(), now) || incidents.findById(evidence.incidentId()).isEmpty()) {
+            return;
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("containers", evidence.containers());
+        data.put("logLines", evidence.logLines());
+        data.put("changes", evidence.changes());
+        data.put("bundleBytes", evidence.bundleBytes());
+        if (evidence.likelyCause() != null) {
+            data.put("likelyCause", evidence.likelyCause());
+        }
+        String message = "Evidence captured: %d log lines from %d containers, %d changes in the hour before"
+                .formatted(evidence.logLines(), evidence.containers(), evidence.changes());
+        timeline.add(evidence.incidentId(), TimelineEntry.Type.EVIDENCE, message, "capture", data, evidence.occurredAt());
     }
 
     @Transactional(readOnly = true)

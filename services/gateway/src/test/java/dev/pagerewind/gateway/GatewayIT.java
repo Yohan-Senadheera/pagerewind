@@ -89,7 +89,7 @@ class GatewayIT {
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("pagerewind.gateway.rate-limits.alerts-per-second", () -> 1);
         registry.add("pagerewind.gateway.rate-limits.alerts-burst", () -> 3);
-        for (String service : List.of("INCIDENT_URL", "SCHEDULE_URL", "INGEST_URL", "NOTIFY_URL")) {
+        for (String service : List.of("INCIDENT_URL", "SCHEDULE_URL", "INGEST_URL", "NOTIFY_URL", "CAPTURE_URL")) {
             registry.add(service, SERVICES::url);
         }
     }
@@ -142,6 +142,10 @@ class GatewayIT {
         get(browser, GATEWAY + "/ui/schedules");
         assertThat(SERVICES.last().path()).isEqualTo("/ui/schedules");
         assertThat(SERVICES.last().authorization()).isEqualTo(request.authorization());
+
+        get(browser, GATEWAY + "/ui/evidence/7b1f6c1e-0000-4000-8000-000000000001");
+        assertThat(SERVICES.last().path()).isEqualTo("/ui/evidence/7b1f6c1e-0000-4000-8000-000000000001");
+        assertThat(SERVICES.last().authorization()).as("evidence downloads carry the person's token").isEqualTo(request.authorization());
     }
 
     @Test

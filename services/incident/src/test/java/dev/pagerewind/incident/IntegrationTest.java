@@ -56,6 +56,7 @@ abstract class IntegrationTest {
         jdbc.sql("TRUNCATE incident, incident_event, outbox, processed_event").update();
         admin.purgeQueue(properties.alertsQueue(), false);
         admin.purgeQueue(properties.alertsDeadLetterQueue(), false);
+        admin.purgeQueue(properties.evidenceQueue(), false);
     }
 
     protected static AlertReceived alert(String fingerprint) {
