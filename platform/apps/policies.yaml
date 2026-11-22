@@ -1,5 +1,5 @@
-# Kyverno policies for the application namespaces. In Audit mode first: violations are reported in
-# PolicyReports, nothing is blocked. Switched to Enforce once every workload passes.
+# Kyverno policies for the application namespaces, enforced: a resource that breaks a rule is refused.
+# They ran in Audit mode first (reports only) until every workload passed.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -8,7 +8,7 @@ metadata:
     policies.kyverno.io/title: Require liveness and readiness probes
     policies.kyverno.io/severity: medium
 spec:
-  validationActions: [Audit]
+  validationActions: [Deny]
   evaluation:
     background:
       enabled: true
