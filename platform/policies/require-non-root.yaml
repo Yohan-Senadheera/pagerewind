@@ -1,0 +1,43 @@
+# Containers must not run as root: a broken-into root container can do far more damage.
+# Every container (and init container) must have runAsNonRoot: true, set on itself or on the pod.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-non-root
+  annotations:
+    policies.kyverno.io/title: Require non-root containers
+    policies.kyverno.io/severity: high
+spec:
+  validationActions: [Audit]
+  evaluation:
+    background:
+      enabled: true
+  # Check pods only; workloads are checked through the pods they create.
+  autogen:
+    podControllers:
+      controllers: []
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: ["pagerewind", "keycloak", "whoami"]
+  variables:
+    - name: podNonRoot
+      expression: >-
+        has(object.spec.securityContext) && has(object.spec.securityContext.runAsNonRoot) &&
+        object.spec.securityContext.runAsNonRoot == true
+    - name: allContainers
+      expression: "object.spec.containers + (has(object.spec.initContainers) ? object.spec.initContainers : [])"
+  validations:
+    - expression: >-
+        variables.allContainers.all(c,
+          has(c.securityContext) && has(c.securityContext.runAsNonRoot)
+            ? c.securityContext.runAsNonRoot == true
+            : variables.podNonRoot)
+      message: "Set securityContext.runAsNonRoot: true on the pod or on every container."

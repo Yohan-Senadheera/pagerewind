@@ -1,0 +1,30 @@
+# Long-running workloads need liveness and readiness probes, so Kubernetes restarts a stuck container
+# and only sends traffic to ready ones. Jobs are not checked: they run once and exit.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-probes
+  annotations:
+    policies.kyverno.io/title: Require liveness and readiness probes
+    policies.kyverno.io/severity: medium
+spec:
+  validationActions: [Audit]
+  evaluation:
+    background:
+      enabled: true
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets"]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: ["pagerewind", "keycloak", "whoami"]
+  validations:
+    - expression: >-
+        object.spec.template.spec.containers.all(c,
+          has(c.livenessProbe) && has(c.readinessProbe))
+      message: "Set livenessProbe and readinessProbe on every container."
