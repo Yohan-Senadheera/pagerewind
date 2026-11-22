@@ -11,6 +11,18 @@ spring:
   flyway:
     schemas: capture
     default-schema: capture
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: pagerewind
+    password: pagerewind
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        concurrency: 1
+        max-concurrency: 2
+        prefetch: 5
+        default-requeue-rejected: true
   mvc:
     problemdetails:
       enabled: true
@@ -37,6 +49,15 @@ pagerewind:
     look-back: 1h
     follow-logs: true
     record-changes: true
+    max-bundle-size: 5MB
+    evidence-retention: 30d
+    incidents-queue: capture.incident-events
+    delivery-limit: 4
+  messaging:
+    publish-timeout: 5s
+    outbox:
+      batch-size: 50
+      poll-interval-ms: 500
 
 management:
   endpoints:

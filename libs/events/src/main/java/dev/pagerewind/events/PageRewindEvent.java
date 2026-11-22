@@ -11,7 +11,8 @@ import java.util.UUID;
  * shapes during a rolling upgrade.
  */
 public sealed interface PageRewindEvent
-        permits AlertReceived, IncidentTriggered, IncidentAcknowledged, IncidentResolved, PageRequested {
+        permits AlertReceived, IncidentTriggered, IncidentAcknowledged, IncidentResolved, PageRequested,
+        EvidenceCaptured {
 
     UUID eventId();
 

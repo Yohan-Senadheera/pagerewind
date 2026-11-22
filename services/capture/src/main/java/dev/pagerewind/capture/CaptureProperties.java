@@ -16,11 +16,13 @@ import org.springframework.util.unit.DataSize;
  * @param redactPatterns       extra regular expressions to mask, on top of the built-in ones
  * @param followLogs           follow container logs (off in tests that only check changes)
  * @param recordChanges        watch for changes
+ * @param maxBundleSize        size limit of one incident's evidence bundle
+ * @param evidenceRetention    how long evidence bundles are kept
  */
 @ConfigurationProperties("pagerewind.capture")
 record CaptureProperties(String recordLabel, Duration window, int maxLinesPerContainer, DataSize maxBufferSize,
         Duration deletedPodRetention, Duration changeRetention, Duration lookBack, List<String> redactPatterns,
-        boolean followLogs, boolean recordChanges) {
+        boolean followLogs, boolean recordChanges, DataSize maxBundleSize, Duration evidenceRetention) {
 
     CaptureProperties {
         recordLabel = recordLabel == null ? "pagerewind.dev/record" : recordLabel;
@@ -31,5 +33,7 @@ record CaptureProperties(String recordLabel, Duration window, int maxLinesPerCon
         changeRetention = changeRetention == null ? Duration.ofDays(7) : changeRetention;
         lookBack = lookBack == null ? Duration.ofHours(1) : lookBack;
         redactPatterns = redactPatterns == null ? List.of() : List.copyOf(redactPatterns);
+        maxBundleSize = maxBundleSize == null ? DataSize.ofMegabytes(5) : maxBundleSize;
+        evidenceRetention = evidenceRetention == null ? Duration.ofDays(30) : evidenceRetention;
     }
 }

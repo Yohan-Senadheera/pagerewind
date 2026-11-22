@@ -18,11 +18,13 @@ class RecorderMaintenance {
     private final LogBuffer buffer;
     private final ChangeRepository changes;
     private final CaptureProperties properties;
+    private final EvidenceService evidence;
     private final Clock clock;
 
     RecorderMaintenance(LogBuffer buffer, ChangeRepository changes, CaptureProperties properties, Clock clock,
-            PodLogFollower follower, MeterRegistry meters) {
+            PodLogFollower follower, EvidenceService evidence, MeterRegistry meters) {
         this.buffer = buffer;
+        this.evidence = evidence;
         this.changes = changes;
         this.properties = properties;
         this.clock = clock;
@@ -46,6 +48,10 @@ class RecorderMaintenance {
         int deleted = changes.deleteOlderThan(clock.instant().minus(properties.changeRetention()));
         if (deleted > 0) {
             log.info("Deleted {} changes older than {}", deleted, properties.changeRetention());
+        }
+        int bundles = evidence.deleteOlderThan(clock.instant().minus(properties.evidenceRetention()));
+        if (bundles > 0) {
+            log.info("Deleted {} evidence bundles older than {}", bundles, properties.evidenceRetention());
         }
     }
 }

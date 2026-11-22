@@ -6,6 +6,10 @@ import static org.awaitility.Awaitility.await;
 import dev.pagerewind.capture.LogBuffer.ContainerKey;
 import dev.pagerewind.capture.LogBuffer.LogLine;
 import dev.pagerewind.security.TestJwts;
+import dev.pagerewind.events.EventType;
+import dev.pagerewind.events.IncidentTriggered;
+import dev.pagerewind.events.Messaging;
+import dev.pagerewind.events.Severity;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
 import io.fabric8.kubernetes.api.model.PodBuilder;
@@ -21,6 +25,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,6 +43,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.k3s.K3sContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -65,6 +74,12 @@ class CaptureIT {
             return new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine"));
         }
 
+        @Bean
+        @ServiceConnection
+        RabbitMQContainer rabbit() {
+            return new RabbitMQContainer(DockerImageName.parse("rabbitmq:4.1-alpine"));
+        }
+
         /** Used instead of the application's own client, which would read the local kubeconfig. */
         @Bean(destroyMethod = "close")
         @Primary
@@ -88,6 +103,8 @@ class CaptureIT {
     private JsonMapper json;
     @Autowired
     private Environment environment;
+    @Autowired
+    private RabbitTemplate rabbit;
 
     private void namespace(String name, boolean recorded) {
         var builder = new NamespaceBuilder().withNewMetadata().withName(name);
@@ -180,6 +197,59 @@ class CaptureIT {
         assertThat(anonymous).isEqualTo(401);
         assertThat(viewer).isEqualTo(403);
         assertThat(status).isEqualTo(200);
+    }
+
+    @Test
+    void anIncidentForADeadPodGetsItsLastLinesAsEvidence() throws Exception {
+        namespace("payments", true);
+        k8s.pods().inNamespace("payments").resource(new PodBuilder()
+                .withNewMetadata().withName("payments-api-0").endMetadata()
+                .withNewSpec().withTerminationGracePeriodSeconds(0L)
+                .addNewContainer().withName("api").withImage("busybox:1.37")
+                .withCommand("sh", "-c", "echo 'boom: card processor timed out'; sleep 3600").endContainer()
+                .endSpec().build()).create();
+        await().atMost(WAIT).untilAsserted(() -> assertThat(lines("payments", "payments-api-0")).anyMatch(l -> l.contains("boom")));
+        // The pod dies before its alert fires.
+        k8s.pods().inNamespace("payments").withName("payments-api-0").withGracePeriod(0).delete();
+        await().atMost(WAIT).until(() -> k8s.pods().inNamespace("payments").withName("payments-api-0").get() == null);
+
+        UUID incident = UUID.randomUUID();
+        IncidentTriggered triggered = new IncidentTriggered(UUID.randomUUID(), Instant.now(), 1, incident,
+                "alertmanager:payments", "payments", Severity.CRITICAL, "Payments API down",
+                Map.of("namespace", "payments", "pod", "payments-api-0", "alertname", "PodDown"));
+        MessageProperties props = new MessageProperties();
+        props.setHeader(Messaging.EVENT_TYPE_HEADER, "INCIDENT_TRIGGERED");
+        props.setMessageId(triggered.eventId().toString());
+        rabbit.send(Messaging.EVENTS_EXCHANGE, EventType.INCIDENT_TRIGGERED.routingKey(),
+                new Message(json.writeValueAsBytes(triggered), props));
+        rabbit.send(Messaging.EVENTS_EXCHANGE, EventType.INCIDENT_TRIGGERED.routingKey(),
+                new Message(json.writeValueAsBytes(triggered), props));
+
+        await().atMost(WAIT).untilAsserted(() -> assertThat(
+                jdbc.sql("SELECT count(*) FROM evidence WHERE incident_id = ?").param(incident).query(Long.class).single()).isEqualTo(1));
+        await().atMost(WAIT).untilAsserted(() -> assertThat(jdbc.sql(
+                "SELECT count(*) FROM outbox WHERE event_type = 'EVIDENCE_CAPTURED' AND payload->>'incidentId' = ?")
+                .param(incident.toString()).query(Long.class).single()).as("once, although the event came twice").isEqualTo(1));
+
+        String base = "http://localhost:" + environment.getProperty("local.server.port");
+        HttpClient http = HttpClient.newHttpClient();
+        HttpResponse<byte[]> download = http.send(HttpRequest.newBuilder(URI.create(base + "/ui/evidence/" + incident))
+                .header("Authorization", "Bearer " + TestJwts.get().person("alice", "responder")).build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(download.statusCode()).isEqualTo(200);
+        assertThat(download.headers().firstValue("Content-Type")).hasValue("application/zip");
+        Map<String, String> files = EvidenceBundleTest.unzip(download.body());
+        assertThat(files.get("logs/payments/payments-api-0/api.log")).contains("boom: card processor timed out");
+        assertThat(files.get("README.txt")).contains(incident.toString());
+
+        int viewer = http.send(HttpRequest.newBuilder(URI.create(base + "/v1/evidence/" + incident))
+                .header("Authorization", "Bearer " + TestJwts.get().person("vera", "viewer")).build(),
+                HttpResponse.BodyHandlers.discarding()).statusCode();
+        int unknown = http.send(HttpRequest.newBuilder(URI.create(base + "/v1/evidence/" + UUID.randomUUID()))
+                .header("Authorization", "Bearer " + TestJwts.get().person("alice", "responder")).build(),
+                HttpResponse.BodyHandlers.discarding()).statusCode();
+        assertThat(viewer).isEqualTo(403);
+        assertThat(unknown).isEqualTo(404);
     }
 
     private long count(String kind, String name) {
