@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: capture
+  datasource:
+    url: jdbc:postgresql://localhost:5432/pagerewind
+    username: pagerewind
+    password: pagerewind
+    hikari:
+      schema: capture
+      maximum-pool-size: 5
+  flyway:
+    schemas: capture
+    default-schema: capture
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${PAGEREWIND_AUTH_ISSUER:http://localhost:8180/realms/pagerewind}
+          jwk-set-uri: ${PAGEREWIND_AUTH_JWKS:${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/certs}
+          audiences: pagerewind-api
+
+server:
+  port: 8086
+  shutdown: graceful
+
+pagerewind:
+  capture:
+    record-label: pagerewind.dev/record
+    window: 15m
+    max-lines-per-container: 2000
+    max-buffer-size: 256MB
+    deleted-pod-retention: 30m
+    change-retention: 7d
+    look-back: 1h
+    follow-logs: true
+    record-changes: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: ecs
