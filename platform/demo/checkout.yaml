@@ -1,0 +1,37 @@
+# A stand-in "checkout" service for live demos of the flight recorder. It writes a log line every few
+# seconds. scripts/demo/demo.ps1 bad-deploy breaks it on purpose; fix-deploy puts this version back.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          args:
+            - |
+              i=0
+              while true; do
+                i=$((i+1))
+                echo "checkout: order $i paid OK in $((RANDOM % 90 + 10)) ms"
+                sleep 5
+              done
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              memory: 32Mi

@@ -1,0 +1,127 @@
+# capture: the flight recorder and "what changed". Read-only access to the cluster; see
+# docs/security/capture-rbac.md. Logs are followed only in namespaces labelled pagerewind.dev/record=true.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: capture
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pagerewind-capture
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "pods/log", "events", "configmaps", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pagerewind-capture
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pagerewind-capture
+subjects:
+  - kind: ServiceAccount
+    name: capture
+    namespace: pagerewind
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: capture
+spec:
+  selector:
+    app: capture
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: capture
+spec:
+  # One replica: the flight recorder buffer is in this pod's memory.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: capture
+  template:
+    metadata:
+      labels:
+        app: capture
+    spec:
+      serviceAccountName: capture
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: capture
+          image: ghcr.io/yohan-senadheera/pagerewind-capture:sha-2f82946
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: pagerewind-config
+          env:
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: postgres-password
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: rabbitmq-password
+            # Kept well inside the container's memory limit (the JVM gets 75% of it).
+            - name: PAGEREWIND_CAPTURE_MAX_BUFFER_SIZE
+              value: "128MB"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 384Mi
+            limits:
+              memory: 640Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 15
+            failureThreshold: 4
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
