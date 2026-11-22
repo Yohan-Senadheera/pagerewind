@@ -4,3 +4,4 @@ resources:
   - require-non-root.yaml
   - require-memory-limits.yaml
   - require-probes.yaml
+  - disallow-host-network.yaml
