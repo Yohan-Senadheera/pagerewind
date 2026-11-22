@@ -17,7 +17,6 @@ resources:
   - status.yaml
   - gateway.yaml
   - ingress.yaml
-  - network-policy.yaml
 # One version for every PageRewind image. sha-d4ded3b is main after #27 (logins, roles, gateway).
 images:
   - name: ghcr.io/yohan-senadheera/pagerewind-gateway

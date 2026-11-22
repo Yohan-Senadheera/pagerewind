@@ -87,9 +87,10 @@ resource "aws_instance" "server" {
 
   metadata_options {
     http_tokens = "required"
-    # 2 hops so a pod (one hop behind the node) can use the node role; External Secrets needs it.
-    # NetworkPolicies block the metadata address for the app namespaces (platform and deploy/).
-    http_put_response_hop_limit = 2
+    # 1 hop: only processes on the node itself (and pods with hostNetwork, such as External Secrets)
+    # can get the node role's credentials. Ordinary pods are one hop further and are refused.
+    # The Ubuntu image defaults to 2, which let every pod use the node role.
+    http_put_response_hop_limit = 1
   }
 
   lifecycle {
@@ -126,9 +127,10 @@ resource "aws_instance" "agent" {
 
   metadata_options {
     http_tokens = "required"
-    # 2 hops so a pod (one hop behind the node) can use the node role; External Secrets needs it.
-    # NetworkPolicies block the metadata address for the app namespaces (platform and deploy/).
-    http_put_response_hop_limit = 2
+    # 1 hop: only processes on the node itself (and pods with hostNetwork, such as External Secrets)
+    # can get the node role's credentials. Ordinary pods are one hop further and are refused.
+    # The Ubuntu image defaults to 2, which let every pod use the node role.
+    http_put_response_hop_limit = 1
   }
 
   lifecycle {

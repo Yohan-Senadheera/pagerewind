@@ -6,7 +6,6 @@ resources:
   - keycloak.yaml
   - ingress.yaml
   - realm-import.yaml
-  - network-policy.yaml
   # Keycloak operator 26.8.2: its four CRDs and the operator itself, the same files as the release's own
   # kustomization.yml in the official keycloak-k8s-resources repository, pinned to the release tag.
   # The operator stops at startup if any of the four CRDs is missing.
