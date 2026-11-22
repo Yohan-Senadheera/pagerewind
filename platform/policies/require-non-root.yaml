@@ -8,7 +8,7 @@ metadata:
     policies.kyverno.io/title: Require non-root containers
     policies.kyverno.io/severity: high
 spec:
-  validationActions: [Audit]
+  validationActions: [Deny]
   evaluation:
     background:
       enabled: true
