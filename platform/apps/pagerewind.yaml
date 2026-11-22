@@ -18,3 +18,8 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    # Every pod in the namespace joins the Istio ambient mesh: traffic between them is mutual TLS
+    # through ztunnel (ADR 0010). The pods themselves do not change.
+    managedNamespaceMetadata:
+      labels:
+        istio.io/dataplane-mode: ambient
