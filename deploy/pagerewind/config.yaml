@@ -1,5 +1,6 @@
 # Settings shared by every service. Passwords and tokens are in the Secret "pagerewind-secrets",
-# which is created outside Git (scripts/demo/new-secrets.ps1) until External Secrets is added.
+# which is created outside Git (scripts/demo/new-secrets.ps1, keycloak-secrets.ps1) until External
+# Secrets is added.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,3 +11,6 @@ data:
   SPRING_RABBITMQ_HOST: rabbitmq
   SPRING_RABBITMQ_USERNAME: pagerewind
   LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  # Tokens name Keycloak by its public address; the services fetch its keys inside the cluster.
+  PAGEREWIND_AUTH_ISSUER: https://auth.pagerewind.dev/realms/pagerewind
+  PAGEREWIND_AUTH_JWKS: http://keycloak-service.keycloak.svc:8080/realms/pagerewind/protocol/openid-connect/certs

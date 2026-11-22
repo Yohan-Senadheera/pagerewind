@@ -1,0 +1,127 @@
+# The gateway: signs people in with Keycloak and serves the web UI at https://app.pagerewind.dev.
+# One replica: sessions are kept in memory (ADR 0009).
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: gateway
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: ghcr.io/yohan-senadheera/pagerewind-gateway:sha-d4ded3b
+          ports:
+            - containerPort: 8080
+          env:
+            # The browser goes to the public Keycloak; the gateway redeems codes inside the cluster.
+            - name: PAGEREWIND_AUTH_ISSUER
+              value: "https://auth.pagerewind.dev/realms/pagerewind"
+            - name: PAGEREWIND_AUTH_BACKCHANNEL
+              value: "http://keycloak-service.keycloak.svc:8080/realms/pagerewind"
+            - name: PAGEREWIND_WEB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: web-client-secret
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis"
+            - name: INCIDENT_URL
+              value: "http://incident"
+            - name: SCHEDULE_URL
+              value: "http://schedule"
+            - name: INGEST_URL
+              value: "http://ingest"
+            - name: NOTIFY_URL
+              value: "http://notify"
+            # Behind Traefik, which ends TLS and sets X-Forwarded-*.
+            - name: FORWARD_HEADERS_STRATEGY
+              value: "framework"
+            - name: SESSION_COOKIE_SECURE
+              value: "true"
+            - name: GATEWAY_TRUSTED_PROXIES
+              value: "1"
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: "ecs"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 384Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 15
+            failureThreshold: 4
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# The web UI and the API, with logins. Everything under app.pagerewind.dev goes through the gateway.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pagerewind-app
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - app.pagerewind.dev
+      secretName: pagerewind-app-tls
+  rules:
+    - host: app.pagerewind.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 80

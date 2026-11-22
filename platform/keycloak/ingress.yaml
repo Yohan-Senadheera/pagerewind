@@ -1,5 +1,5 @@
-# Public paths only: logins, tokens and keys under /realms, and the login page's styles under /resources.
-# The admin console and API (/admin) stay inside the cluster; open them with:
+# Public paths only: the pagerewind realm (logins, tokens, keys) and the login page's styles.
+# The master realm, the admin console and the admin API stay inside the cluster; open them with:
 #   kubectl -n keycloak port-forward svc/keycloak-service 8180:8080   (then http://localhost:8180/admin)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -17,7 +17,7 @@ spec:
     - host: auth.pagerewind.dev
       http:
         paths:
-          - path: /realms/
+          - path: /realms/pagerewind/
             pathType: Prefix
             backend:
               service:
