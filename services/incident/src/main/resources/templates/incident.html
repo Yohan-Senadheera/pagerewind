@@ -27,6 +27,16 @@
         </form>
     </div>
 
+    <section class="evidence" th:if="${evidence}">
+        <h2>Evidence</h2>
+        <p th:if="${evidence.data().get('likelyCause') != null}">
+            <strong>Likely cause:</strong> <span th:text="${evidence.data().get('likelyCause')}">change</span>
+        </p>
+        <p th:if="${evidence.data().get('likelyCause') == null}" class="muted">No changes were recorded in the hour before the alert.</p>
+        <p class="muted" th:text="${evidence.message()}">Evidence captured</p>
+        <p th:if="${canRespond}"><a th:href="@{/ui/evidence/{id}(id=${i.id()})}">Download the evidence (logs and changes, zip)</a></p>
+    </section>
+
     <p class="muted" th:if="${i.status().isOpen() and !canRespond}">You can view incidents. Ask an admin for the responder role to acknowledge or resolve them.</p>
 
     <h2>Timeline</h2>

@@ -10,7 +10,8 @@ public enum EventType {
     INCIDENT_TRIGGERED("incident.triggered", IncidentTriggered.class),
     INCIDENT_ACKNOWLEDGED("incident.acknowledged", IncidentAcknowledged.class),
     INCIDENT_RESOLVED("incident.resolved", IncidentResolved.class),
-    PAGE_REQUESTED("page.requested", PageRequested.class);
+    PAGE_REQUESTED("page.requested", PageRequested.class),
+    EVIDENCE_CAPTURED("evidence.captured", EvidenceCaptured.class);
 
     private final String routingKey;
     private final Class<? extends PageRewindEvent> eventClass;
@@ -35,6 +36,7 @@ public enum EventType {
             case IncidentAcknowledged e -> INCIDENT_ACKNOWLEDGED;
             case IncidentResolved e -> INCIDENT_RESOLVED;
             case PageRequested e -> PAGE_REQUESTED;
+            case EvidenceCaptured e -> EVIDENCE_CAPTURED;
         };
     }
 

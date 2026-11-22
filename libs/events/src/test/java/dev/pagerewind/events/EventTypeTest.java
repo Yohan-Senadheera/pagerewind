@@ -47,6 +47,14 @@ class EventTypeTest {
         assertThat(new PageRequested(id, now, 1, incident, 1, 1, "alice", "Alice",
                 List.of(new Contact(Contact.Channel.EMAIL, "a@example.com")), "api", Severity.CRITICAL, "down").type())
                 .isEqualTo(EventType.PAGE_REQUESTED);
+        assertThat(new EvidenceCaptured(id, now, 1, incident, 2, 40, 3, 4096, "Deployment api changed image").type())
+                .isEqualTo(EventType.EVIDENCE_CAPTURED);
+    }
+
+    @Test
+    void evidenceWithoutALikelyCauseHasNone() {
+        EvidenceCaptured evidence = new EvidenceCaptured(UUID.randomUUID(), Instant.now(), 1, UUID.randomUUID(), 0, 0, 0, 0, " ");
+        assertThat(evidence.likelyCause()).isNull();
     }
 
     @ParameterizedTest
