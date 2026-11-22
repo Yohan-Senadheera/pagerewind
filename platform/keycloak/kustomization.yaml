@@ -14,3 +14,16 @@ resources:
   - https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.8.2/kubernetes/keycloakoidcclients.k8s.keycloak.org-v1.yml
   - https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.8.2/kubernetes/keycloaksamlclients.k8s.keycloak.org-v1.yml
   - https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.8.2/kubernetes/kubernetes.yml
+patches:
+  # The upstream operator Deployment does not declare a non-root user; its image runs as 1000.
+  - target:
+      kind: Deployment
+      name: keycloak-operator
+    patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext
+        value:
+          runAsNonRoot: true
+          runAsUser: 1000
+          seccompProfile:
+            type: RuntimeDefault

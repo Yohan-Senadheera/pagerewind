@@ -29,6 +29,16 @@ spec:
     enabled: false
   serviceMonitor:
     enabled: false
+  # Run as the image's keycloak user (1000), declared so the non-root policy can check it. The operator
+  # also builds the realm import job from this pod template.
+  unsupported:
+    podTemplate:
+      spec:
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          seccompProfile:
+            type: RuntimeDefault
   resources:
     requests:
       cpu: 100m

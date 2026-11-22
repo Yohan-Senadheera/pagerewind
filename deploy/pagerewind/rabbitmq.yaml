@@ -24,6 +24,15 @@ spec:
       labels:
         app: rabbitmq
     spec:
+      # The image starts as root and drops to user rabbitmq (100) itself. Start as that user instead; the
+      # data volume already belongs to 100:101, and fsGroup keeps it that way on a new volume.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: rabbitmq
           image: rabbitmq:4.1-alpine
