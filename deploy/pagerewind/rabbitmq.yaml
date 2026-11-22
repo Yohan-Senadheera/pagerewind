@@ -25,14 +25,32 @@ spec:
         app: rabbitmq
     spec:
       # The image starts as root and drops to user rabbitmq (100) itself. Start as that user instead; the
-      # data volume already belongs to 100:101, and fsGroup keeps it that way on a new volume.
+      # data volume already belongs to 100. No fsGroup: it would make the Erlang cookie group-readable,
+      # and Erlang refuses to start unless only the owner can read it.
       securityContext:
         runAsNonRoot: true
         runAsUser: 100
         runAsGroup: 101
-        fsGroup: 101
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # Owner-only cookie, also repairing a volume that was once mounted with fsGroup.
+        - name: cookie-permissions
+          image: rabbitmq:4.1-alpine
+          command: ["sh", "-c", "if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then chmod 600 /var/lib/rabbitmq/.erlang.cookie; fi"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
       containers:
         - name: rabbitmq
           image: rabbitmq:4.1-alpine
