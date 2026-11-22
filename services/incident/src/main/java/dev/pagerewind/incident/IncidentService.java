@@ -93,7 +93,7 @@ public class IncidentService {
                 timeline.add(id, TimelineEntry.Type.TRIGGERED, "Incident opened: " + alert.summary(),
                         alert.source(), Map.of("fingerprint", alert.fingerprint()), now);
                 outbox.add(new IncidentTriggered(UUID.randomUUID(), now, IncidentTriggered.CURRENT_VERSION, id,
-                        alert.fingerprint(), alert.service(), alert.severity(), alert.summary()), now);
+                        alert.fingerprint(), alert.service(), alert.severity(), alert.summary(), alert.labels()), now);
                 attachAlert(id, alert, now);
                 Counter.builder("pagerewind.incidents.opened")
                         .description("Incidents opened")

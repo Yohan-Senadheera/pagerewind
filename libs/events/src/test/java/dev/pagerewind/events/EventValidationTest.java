@@ -25,6 +25,20 @@ class EventValidationTest {
     }
 
     @Test
+    void incidentTriggeredCarriesTheAlertLabelsAndDefaultsToNone() {
+        Map<String, String> labels = new HashMap<>(Map.of("namespace", "shop", "pod", "checkout-7d9f"));
+        IncidentTriggered withLabels = new IncidentTriggered(UUID.randomUUID(), NOW, 1, UUID.randomUUID(), "fp", "checkout",
+                Severity.CRITICAL, "down", labels);
+        labels.put("pod", "changed-later");
+        IncidentTriggered older = new IncidentTriggered(UUID.randomUUID(), NOW, 1, UUID.randomUUID(), "fp", "checkout",
+                Severity.CRITICAL, "down", null);
+
+        assertThat(withLabels.labels()).containsEntry("pod", "checkout-7d9f");
+        assertThatThrownBy(() -> withLabels.labels().put("x", "y")).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(older.labels()).isEmpty();
+    }
+
+    @Test
     void labelsAreCopiedAndImmutable() {
         Map<String, String> labels = new HashMap<>();
         labels.put("env", "prod");
