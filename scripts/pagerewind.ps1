@@ -13,6 +13,8 @@
     extend  Move the automatic stop to -Hours from now (default 4).
     status  Show nodes, the automatic stop time and Argo CD applications.
     kubeconfig  Fetch the cluster admin kubeconfig again.
+    allow-me    Let this network reach the cluster (SSH and the Kubernetes API). start, status and
+            kubeconfig do this by themselves when your public IP has changed (new Wi-Fi, router restart).
 
     Needs: aws (logged in with 'aws login --profile pager'), terraform, kubectl, helm, ssh,
     infra/backend.hcl and the SSH key ~/.ssh/pagerewind.
@@ -26,7 +28,7 @@
 #>
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('up', 'down', 'stop', 'start', 'extend', 'status', 'kubeconfig')]
+    [ValidateSet('up', 'down', 'stop', 'start', 'extend', 'status', 'kubeconfig', 'allow-me')]
     [string]$Command,
 
     [ValidateRange(0, 24)]
@@ -93,6 +95,35 @@ function Initialize-Stack([string]$Stack) {
 function Get-AdminCidr {
     $ip = (Invoke-RestMethod -Uri 'https://checkip.amazonaws.com' -UseBasicParsing).ToString().Trim()
     return "$ip/32"
+}
+
+# SSH and the Kubernetes API are open only to your public IP (admin_cidr). When the IP changes, update just
+# those two firewall rules, and remember the IP in infra/reference/terraform.tfvars (not committed).
+function Update-AdminAccess {
+    $cidr = Get-AdminCidr
+    $tfvars = Join-Path $Infra 'reference\terraform.tfvars'
+    $saved = $null
+    if (Test-Path $tfvars) {
+        $line = Select-String -Path $tfvars -Pattern '^\s*admin_cidr\s*=\s*"([^"]+)"' | Select-Object -First 1
+        if ($line) { $saved = $line.Matches[0].Groups[1].Value }
+    }
+    if ($saved -eq $cidr) { return }
+    Write-Step "Your public IP changed; allowing $cidr to reach the cluster (firewall rules for SSH and the Kubernetes API only)"
+    Initialize-Stack 'reference' | Out-Null
+    Invoke-Terraform 'reference' @('apply', '-input=false', '-auto-approve', "-var=admin_cidr=$cidr",
+        '-target=module.network.aws_vpc_security_group_ingress_rule.ssh',
+        '-target=module.network.aws_vpc_security_group_ingress_rule.kube_api')
+    if (Test-Path $tfvars) {
+        $content = Get-Content $tfvars
+        if ($saved) {
+            $content = $content -replace '^\s*admin_cidr\s*=.*', "admin_cidr = `"$cidr`""
+        } else {
+            $content += "admin_cidr = `"$cidr`""
+        }
+        Set-Content -Encoding ascii -Path $tfvars -Value $content
+    } else {
+        Set-Content -Encoding ascii -Path $tfvars -Value "admin_cidr = `"$cidr`""
+    }
 }
 
 function Get-ServerIp {
@@ -224,6 +255,7 @@ switch ($Command) {
         Write-Step "Network and nodes (infra/reference), admin access from $cidr"
         Initialize-Stack 'reference'
         Invoke-Terraform 'reference' @('apply', '-input=false', '-auto-approve', "-var=admin_cidr=$cidr")
+        Update-AdminAccess
         $ip = Get-ServerIp
         if (Test-Path $KnownHosts) { Remove-Item $KnownHosts }
         Wait-ForCluster $ip
@@ -268,6 +300,7 @@ switch ($Command) {
         Assert-Prerequisites
         $ids = Get-InstanceIds
         if ($ids.Count -eq 0) { Write-Host 'No nodes found. Run: ./scripts/pagerewind.ps1 up'; return }
+        Update-AdminAccess
         aws ec2 start-instances --profile $AwsProfile --instance-ids @ids --output text | Out-Null
         Assert-Success 'start-instances'
         aws ec2 wait instance-running --profile $AwsProfile --instance-ids @ids
@@ -283,6 +316,7 @@ switch ($Command) {
     }
     'status' {
         Assert-Prerequisites
+        Update-AdminAccess
         aws ec2 describe-instances --profile $AwsProfile --filters 'Name=tag:Project,Values=pagerewind' `
             --query "Reservations[].Instances[].[Tags[?Key=='Name']|[0].Value,State.Name,InstanceType]" --output table
         Show-SessionStop
@@ -294,7 +328,13 @@ switch ($Command) {
     }
     'kubeconfig' {
         Assert-Prerequisites
+        Update-AdminAccess
         Save-Kubeconfig (Get-ServerIp)
         Write-Host "Saved. Run: `$env:KUBECONFIG = `"$Kubeconfig`""
+    }
+    'allow-me' {
+        Assert-Prerequisites
+        Update-AdminAccess
+        Write-Host "SSH and the Kubernetes API are open to $(Get-AdminCidr)."
     }
 }
