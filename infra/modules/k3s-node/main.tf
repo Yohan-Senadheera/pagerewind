@@ -87,6 +87,9 @@ resource "aws_instance" "server" {
 
   metadata_options {
     http_tokens = "required"
+    # 2 hops so a pod (one hop behind the node) can use the node role; External Secrets needs it.
+    # NetworkPolicies block the metadata address for the app namespaces (platform and deploy/).
+    http_put_response_hop_limit = 2
   }
 
   lifecycle {
@@ -123,6 +126,9 @@ resource "aws_instance" "agent" {
 
   metadata_options {
     http_tokens = "required"
+    # 2 hops so a pod (one hop behind the node) can use the node role; External Secrets needs it.
+    # NetworkPolicies block the metadata address for the app namespaces (platform and deploy/).
+    http_put_response_hop_limit = 2
   }
 
   lifecycle {
