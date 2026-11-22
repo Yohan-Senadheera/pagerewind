@@ -57,7 +57,10 @@ $envArgs = @(
     "NEW_USER=$Username"; "NEW_FIRST=$FirstName"; "NEW_LAST=$LastName"
     "NEW_PASSWORD=$password"; "NEW_ROLE=$Role"
 )
-$result = $script | kubectl -n $namespace exec -i $pod -- env @envArgs bash -s
+# Sent base64-encoded: Windows PowerShell pipes text with CRLF line endings and a byte-order mark, which
+# bash would read as part of the commands ("admin\r" is not a role).
+$encoded = [Convert]::ToBase64String((New-Object Text.UTF8Encoding $false).GetBytes($script))
+$result = kubectl -n $namespace exec $pod -- env @envArgs bash -c "echo $encoded | base64 -d | bash"
 if ($LASTEXITCODE -ne 0) { throw "Creating $Username failed: $result" }
 $envArgs = $null
 
