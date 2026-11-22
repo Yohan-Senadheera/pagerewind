@@ -10,7 +10,8 @@
     resolve   Send the matching "resolved" alert.
     status    Show the escalation jobs of the newest incident.
 
-    Secrets are read from the cluster and never printed.
+    Secrets are read from the cluster and never printed. The incident and schedule APIs need a Keycloak
+    token; seed and status get one with the pagerewind-automation client (admin role).
 #>
 param(
     [Parameter(Mandatory = $true, Position = 0)]
@@ -27,6 +28,17 @@ function Get-SecretValue([string]$Key) {
     $encoded = kubectl -n $Namespace get secret pagerewind-secrets -o "jsonpath={.data.$Key}"
     if ($LASTEXITCODE -ne 0 -or -not $encoded) { throw "Secret value $Key not found" }
     return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encoded))
+}
+
+function Get-ApiToken {
+    $body = @{
+        grant_type    = 'client_credentials'
+        client_id     = 'pagerewind-automation'
+        client_secret = (Get-SecretValue 'automation-client-secret')
+    }
+    $result = Invoke-RestMethod -Method Post -Body $body `
+        -Uri "https://auth.$Domain/realms/pagerewind/protocol/openid-connect/token"
+    return @{ Authorization = "Bearer $($result.access_token)" }
 }
 
 function Invoke-WithPortForward([string]$Service, [int]$LocalPort, [scriptblock]$Action) {
@@ -72,11 +84,12 @@ switch ($Command) {
         $chatId = Read-Host 'Your Telegram chat id (numbers only)'
         if ($chatId -notmatch '^-?\d+$') { throw 'The chat id must be a number' }
         $today = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
+        $script:auth = Get-ApiToken
         Invoke-WithPortForward 'schedule' 18083 {
             param($base)
             $put = {
                 param($path, $body)
-                Invoke-RestMethod -Method Put -Uri "$base$path" -ContentType 'application/json' -Body $body | Out-Null
+                Invoke-RestMethod -Method Put -Uri "$base$path" -Headers $script:auth -ContentType 'application/json' -Body $body | Out-Null
                 Write-Host "  PUT $path"
             }
             & $put '/v1/people/oncall' "{`"name`":`"On-call engineer`",`"contacts`":[{`"channel`":`"TELEGRAM`",`"address`":`"$chatId`"}]}"
@@ -102,9 +115,10 @@ switch ($Command) {
     'alert' { Send-Alert 'firing' }
     'resolve' { Send-Alert 'resolved' }
     'status' {
+        $script:auth = Get-ApiToken
         Invoke-WithPortForward 'incident' 18082 {
             param($base)
-            $incident = (Invoke-RestMethod "$base/v1/incidents?limit=1")[0]
+            $incident = (Invoke-RestMethod "$base/v1/incidents?limit=1" -Headers $script:auth)[0]
             if (-not $incident) { Write-Host 'No incidents yet.'; return }
             Write-Host "Incident $($incident.id): $($incident.status), $($incident.alertCount) alert(s)"
             $script:incidentId = $incident.id
@@ -112,7 +126,7 @@ switch ($Command) {
         if ($script:incidentId) {
             Invoke-WithPortForward 'schedule' 18083 {
                 param($base)
-                $view = Invoke-RestMethod "$base/v1/escalations/$($script:incidentId)"
+                $view = Invoke-RestMethod "$base/v1/escalations/$($script:incidentId)" -Headers $script:auth
                 $view.jobs | Select-Object stepNo, round, fireAt, status, personId | Format-Table -AutoSize
             }
         }

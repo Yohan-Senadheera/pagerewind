@@ -50,6 +50,14 @@ spec:
                   key: rabbitmq-password
             - name: INCIDENT_BASE_URL
               value: "http://incident"
+            # notify's own Keycloak login (client credentials) for acknowledging in the incident service.
+            - name: NOTIFY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pagerewind-secrets
+                  key: notify-client-secret
+            - name: PAGEREWIND_AUTH_TOKEN_URI
+              value: "http://keycloak-service.keycloak.svc:8080/realms/pagerewind/protocol/openid-connect/token"
             - name: NOTIFY_PUBLIC_BASE_URL
               value: "https://notify.pagerewind.dev"
             - name: NOTIFY_EMAIL_FROM
