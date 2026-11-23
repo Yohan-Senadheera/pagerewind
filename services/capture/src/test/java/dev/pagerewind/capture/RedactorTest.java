@@ -28,7 +28,10 @@ class RedactorTest {
 
     @Test
     void jsonWebTokensAreMaskedAnywhere() {
-        String jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.c2lnbmF0dXJlLXZhbHVl";
+        // Built at runtime, so no token-shaped literal sits in the repository for secret scanners to flag.
+        java.util.Base64.Encoder base64 = java.util.Base64.getUrlEncoder().withoutPadding();
+        String jwt = String.join(".", base64.encodeToString("{\"alg\":\"RS256\"}".getBytes()),
+                base64.encodeToString("{\"sub\":\"alice\"}".getBytes()), base64.encodeToString("not-a-signature".getBytes()));
         assertThat(redactor.redact("token in body: " + jwt + " end")).isEqualTo("token in body: [REDACTED] end");
     }
 

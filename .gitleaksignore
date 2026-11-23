@@ -1,0 +1,4 @@
+# Findings reviewed and accepted, one per line, by gitleaks fingerprint (commit:file:rule:line).
+# Fake JSON web token used as test data for log redaction (payload {"sub":"alice"}, no real signature).
+# The test now builds it at runtime; this line only covers the old commit in history.
+6a2d4f4636879d6faf883ddba566e8888e1bcd27:services/capture/src/test/java/dev/pagerewind/capture/RedactorTest.java:jwt:31
