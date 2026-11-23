@@ -5,3 +5,4 @@ resources:
   - require-memory-limits.yaml
   - require-probes.yaml
   - disallow-host-network.yaml
+  - require-signed-images.yaml

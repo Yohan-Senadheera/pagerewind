@@ -1,0 +1,47 @@
+# PageRewind images must be signed by this repository's images workflow (on main or a release tag).
+# An image pushed by hand, built by a fork or altered in the registry has no such signature and is refused.
+# Keyless: the signature carries a short-lived certificate from Sigstore that names the GitHub workflow,
+# and the signature is recorded in Sigstore's public transparency log. No key to store or rotate.
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: require-signed-images
+  annotations:
+    policies.kyverno.io/title: Require PageRewind images signed by CI
+    policies.kyverno.io/severity: high
+spec:
+  validationActions: [Audit]
+  evaluation:
+    background:
+      enabled: true
+  autogen:
+    podControllers:
+      controllers: []
+  webhookConfiguration:
+    # Checking a signature means calls to GHCR and Sigstore; give it more than the default.
+    timeoutSeconds: 20
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: ["pagerewind"]
+  # Only our own images; third-party images (postgres, rabbitmq, ...) are not checked by this policy.
+  matchImageReferences:
+    - glob: "ghcr.io/yohan-senadheera/pagerewind-*"
+  attestors:
+    - name: ci
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subjectRegExp: '^https://github\.com/Yohan-Senadheera/pagerewind/\.github/workflows/images\.yml@refs/(heads/main|tags/v[0-9.]+)$'
+  validations:
+    - expression: >-
+        images.containers.map(image, verifyImageSignatures(image, [attestors.ci])).all(e, e > 0)
+      message: "PageRewind images must be signed by the repository's images workflow on main or a release tag."
