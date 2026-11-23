@@ -105,6 +105,35 @@ class ChangeRankingTest {
     }
 
     @Test
+    void redeployingAnImageThatWasRolledBackIsFlaggedNotCalledARollback() {
+        // The live sequence of 23 Nov: bad deploy, Argo CD puts the good image back, the bad image again.
+        ChangeEvent bad = image(59, "busybox:1.37", "busybox:1.36");
+        ChangeEvent rollback = image(58, "busybox:1.36", "busybox:1.37");
+        ChangeEvent badAgain = ChangeEvent.of(ALERT.minusSeconds(17), Kind.IMAGE, "demo", "checkout", "checkout",
+                "Deployment checkout changed image of container app to busybox:1.36",
+                Map.of("container", "app", "from", "busybox:1.37", "to", "busybox:1.36"));
+
+        List<Ranked> ranked = ranking.rank(List.of(bad, rollback, badAgain), new Target("demo", "checkout"), ALERT);
+
+        assertThat(ranked.getFirst().change()).isEqualTo(badAgain);
+        assertThat(ranked.getFirst().reason()).isEqualTo("Deployment checkout changed image of container app to busybox:1.36, "
+                + "17 seconds before the alert (same workload); this image was rolled back 57 minutes earlier");
+        assertThat(ranked).filteredOn(r -> r.change().equals(rollback)).singleElement()
+                .satisfies(r -> assertThat(r.reason()).endsWith("this was a rollback"));
+        assertThat(ranked).filteredOn(r -> r.change().equals(bad)).singleElement()
+                .satisfies(r -> assertThat(r.reason()).endsWith("reverted 1 minute later"));
+    }
+
+    @Test
+    void independentContainersDoNotAffectEachOther() {
+        ChangeEvent app = image(10, "a:1", "a:2");
+        ChangeEvent sidecar = ChangeEvent.of(ALERT.minus(Duration.ofMinutes(9)), Kind.IMAGE, "demo", "checkout", "checkout",
+                "sidecar change", Map.of("container", "proxy", "from", "a:2", "to", "a:1"));
+
+        assertThat(ChangeRanking.imageHistory(List.of(app, sidecar))).isEmpty();
+    }
+
+    @Test
     void noChangesMeansNoLikelyCause() {
         assertThat(ranking.likelyCause(List.of(), new Target("shop", "checkout"), ALERT)).isEmpty();
     }
