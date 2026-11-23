@@ -2,7 +2,9 @@ package dev.pagerewind.capture;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -79,53 +81,96 @@ final class ChangeRanking {
         List<ChangeEvent> window = changes.stream()
                 .filter(c -> !c.occurredAt().isAfter(alertAt) && !c.occurredAt().isBefore(from))
                 .toList();
+        Map<ChangeEvent, History> history = imageHistory(window);
         return window.stream()
-                .map(c -> score(c, target, alertAt, window))
+                .map(c -> score(c, target, alertAt, history.get(c)))
                 .sorted(Comparator.comparingDouble(Ranked::score).reversed()
                         .thenComparing(r -> r.change().occurredAt(), Comparator.reverseOrder()))
                 .toList();
-    }
-
-    /**
-     * A later image change on the same container that puts back the image this one replaced: this change
-     * was reverted, so whatever it broke is probably fixed again.
-     */
-    private static Optional<ChangeEvent> revertOf(ChangeEvent change, List<ChangeEvent> all) {
-        if (change.kind() != ChangeEvent.Kind.IMAGE || change.details().get("from") == null) {
-            return Optional.empty();
-        }
-        return all.stream()
-                .filter(later -> later.kind() == ChangeEvent.Kind.IMAGE && later.occurredAt().isAfter(change.occurredAt()))
-                .filter(later -> Objects.equals(later.namespace(), change.namespace()) && Objects.equals(later.name(), change.name()))
-                .filter(later -> Objects.equals(later.details().get("container"), change.details().get("container")))
-                .filter(later -> Objects.equals(later.details().get("to"), change.details().get("from")))
-                .findFirst();
-    }
-
-    /** This change itself puts back an image that an earlier change in the window had replaced. */
-    private static boolean isRollback(ChangeEvent change, List<ChangeEvent> all) {
-        return all.stream().anyMatch(earlier -> revertOf(earlier, all).filter(r -> r.equals(change)).isPresent());
     }
 
     Optional<Ranked> likelyCause(List<ChangeEvent> changes, Target target, Instant alertAt) {
         return rank(changes, target, alertAt).stream().findFirst();
     }
 
-    private Ranked score(ChangeEvent change, Target target, Instant alertAt, List<ChangeEvent> window) {
+    /** What happened to an image change afterwards, or what it did relative to earlier ones. */
+    record History(Status status, ChangeEvent related) {
+    }
+
+    enum Status {
+        /** A later change undid it (put back the image it replaced). */
+        REVERTED,
+        /** It undid the change just before it. */
+        ROLLBACK,
+        /** It deploys an image that an earlier change had already rolled back. */
+        REDEPLOYED_ROLLED_BACK
+    }
+
+    /**
+     * Walks the image changes of each container in time order. A change that undoes the one just before it
+     * (A to B, then B to A) is a rollback, unless that one was itself a rollback. A change to an image that
+     * was rolled back earlier is a re-deploy of a known-bad image.
+     */
+    static Map<ChangeEvent, History> imageHistory(List<ChangeEvent> changes) {
+        Map<ChangeEvent, History> history = new HashMap<>();
+        Map<String, List<ChangeEvent>> perContainer = new HashMap<>();
+        for (ChangeEvent change : changes) {
+            if (change.kind() == ChangeEvent.Kind.IMAGE && change.details().get("from") != null) {
+                String key = change.namespace() + "/" + change.name() + "/" + change.details().get("container");
+                perContainer.computeIfAbsent(key, k -> new ArrayList<>()).add(change);
+            }
+        }
+        for (List<ChangeEvent> sequence : perContainer.values()) {
+            sequence.sort(Comparator.comparing(ChangeEvent::occurredAt));
+            Map<String, ChangeEvent> rolledBackImages = new HashMap<>();
+            ChangeEvent previous = null;
+            for (ChangeEvent change : sequence) {
+                String to = change.details().get("to");
+                String fromImage = change.details().get("from");
+                boolean previousWasRollback = previous != null && history.containsKey(previous)
+                        && history.get(previous).status() == Status.ROLLBACK;
+                boolean undoesPrevious = previous != null && !previousWasRollback
+                        && Objects.equals(to, previous.details().get("from"))
+                        && Objects.equals(fromImage, previous.details().get("to"));
+                if (undoesPrevious) {
+                    history.put(change, new History(Status.ROLLBACK, previous));
+                    history.put(previous, new History(Status.REVERTED, change));
+                    rolledBackImages.put(previous.details().get("to"), change);
+                } else if (rolledBackImages.containsKey(to)) {
+                    history.put(change, new History(Status.REDEPLOYED_ROLLED_BACK, rolledBackImages.get(to)));
+                }
+                previous = change;
+            }
+        }
+        return history;
+    }
+
+    private Ranked score(ChangeEvent change, Target target, Instant alertAt, History history) {
         Duration before = Duration.between(change.occurredAt(), alertAt);
         double time = Math.max(0.1, 1.0 - (double) before.toSeconds() / lookBack.toSeconds());
         Scope scope = scope(change, target);
         double score = scope.weight * time * change.kind().weight();
         String reason = "%s, %s before the alert (%s)".formatted(change.summary(), human(before), scope.label);
-        Optional<ChangeEvent> revert = revertOf(change, window);
-        if (revert.isPresent()) {
-            // Still relevant (it may have caused damage that outlasted it), but less likely the current cause.
-            score *= 0.5;
-            reason += "; reverted %s later".formatted(human(Duration.between(change.occurredAt(), revert.get().occurredAt())));
-        } else if (isRollback(change, window)) {
-            // Putting back a known-good image rarely causes an incident.
-            score *= 0.2;
-            reason += "; this was a rollback";
+        if (history != null) {
+            switch (history.status()) {
+                case REVERTED -> {
+                    // Still relevant (its damage may outlast it), but less likely the current cause.
+                    score *= 0.5;
+                    reason += "; reverted %s later".formatted(human(Duration.between(change.occurredAt(),
+                            history.related().occurredAt())));
+                }
+                case ROLLBACK -> {
+                    // Putting back the image that ran before rarely causes an incident.
+                    score *= 0.2;
+                    reason += "; this was a rollback";
+                }
+                case REDEPLOYED_ROLLED_BACK -> {
+                    // The same image was rolled back once already: a strong sign it is bad.
+                    score *= 1.2;
+                    reason += "; this image was rolled back %s earlier".formatted(human(Duration.between(
+                            history.related().occurredAt(), change.occurredAt())));
+                }
+            }
         }
         return new Ranked(change, Math.round(score * 1000) / 1000.0, reason);
     }
