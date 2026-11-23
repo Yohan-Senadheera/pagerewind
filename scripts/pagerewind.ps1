@@ -191,6 +191,34 @@ function Show-SessionStop {
     }
 }
 
+# After the nodes boot, pods can start before Istio's CNI agent is ready. Those pods are then only half in
+# the ambient mesh: plain-text traffic between them works, but a new, properly enrolled pod is refused
+# (seen: new pods could not reach PostgreSQL, 22 Nov). Wait for Istio, then restart the meshed workloads,
+# data stores first, so every pod is enrolled.
+function Repair-MeshEnrollment {
+    $env:KUBECONFIG = $Kubeconfig
+    if (-not (Test-NativeCommand { kubectl -n istio-system get daemonset ztunnel })) { return }
+    Write-Step 'Waiting for Istio (CNI agent and ztunnel), then re-enrolling meshed pods'
+    foreach ($ds in 'istio-cni-node', 'ztunnel') {
+        kubectl -n istio-system rollout status daemonset/$ds --timeout=300s | Out-Null
+        Assert-Success "waiting for $ds"
+    }
+    $namespaces = kubectl get namespaces -l istio.io/dataplane-mode=ambient -o jsonpath='{.items[*].metadata.name}'
+    foreach ($ns in ("$namespaces" -split '\s+' | Where-Object { $_ })) {
+        foreach ($kind in 'statefulset', 'deployment') {
+            $names = kubectl -n $ns get $kind -o jsonpath='{.items[*].metadata.name}'
+            $items = @("$names" -split '\s+' | Where-Object { $_ })
+            if ($items.Count -eq 0) { continue }
+            kubectl -n $ns rollout restart ($items | ForEach-Object { "$kind/$_" }) | Out-Null
+            foreach ($item in $items) {
+                kubectl -n $ns rollout status "$kind/$item" --timeout=420s | Out-Null
+                Assert-Success "restarting $kind/$item in $ns"
+            }
+        }
+        Write-Host "Re-enrolled the pods of namespace $ns in the mesh."
+    }
+}
+
 function Invoke-Ssh([string]$Ip, [string]$RemoteCommand) {
     $ErrorActionPreference = 'Continue'
     ssh -i $SshKey -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$KnownHosts" `
@@ -306,6 +334,7 @@ switch ($Command) {
         aws ec2 wait instance-running --profile $AwsProfile --instance-ids @ids
         Assert-Success 'waiting for instances'
         Wait-ForCluster (Get-ServerIp)
+        Repair-MeshEnrollment
         Set-SessionStop $ids
     }
     'extend' {
