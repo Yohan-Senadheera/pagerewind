@@ -1,0 +1,143 @@
+{{- $root := . }}
+{{- $names := list "gateway" "ingest" "incident" "schedule" "notify" "status" }}
+{{- if .Values.capture.enabled }}{{ $names = append $names "capture" }}{{ end }}
+{{- range $name := $names }}
+{{- $svc := ternary $root.Values.capture (index $root.Values.services $name) (eq $name "capture") }}
+{{- $component := include "pagerewind.component" (list $root $name) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "pagerewind.labels" $root | nindent 4 }}
+    {{- include "pagerewind.selector" (list $root $name) | nindent 4 }}
+spec:
+  selector:
+    {{- include "pagerewind.selector" (list $root $name) | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "pagerewind.labels" $root | nindent 4 }}
+    {{- include "pagerewind.selector" (list $root $name) | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pagerewind.selector" (list $root $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pagerewind.labels" $root | nindent 8 }}
+        {{- include "pagerewind.selector" (list $root $name) | nindent 8 }}
+      annotations:
+        # Restart the pods when the shared settings change.
+        checksum/config: {{ include (print $root.Template.BasePath "/config.yaml") $root | sha256sum }}
+    spec:
+      {{- if eq $name "capture" }}
+      serviceAccountName: {{ $component }}
+      {{- else }}
+      automountServiceAccountToken: false
+      {{- end }}
+      {{- with $root.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml $root.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "pagerewind.image" (list $root $name) }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          {{- if ne $name "gateway" }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "pagerewind.component" (list $root "config") }}
+          {{- end }}
+          env:
+            {{- if ne $name "gateway" }}
+            {{- include "pagerewind.secretEnv" (list $root "SPRING_DATASOURCE_PASSWORD" "postgres-password") | nindent 12 }}
+            {{- include "pagerewind.secretEnv" (list $root "SPRING_RABBITMQ_PASSWORD" "rabbitmq-password") | nindent 12 }}
+            {{- end }}
+            {{- if eq $name "gateway" }}
+            - name: PAGEREWIND_AUTH_ISSUER
+              value: {{ $root.Values.auth.issuer | quote }}
+            - name: PAGEREWIND_AUTH_BACKCHANNEL
+              value: {{ include "pagerewind.internalRealmUrl" $root | quote }}
+            {{- include "pagerewind.secretEnv" (list $root "PAGEREWIND_WEB_CLIENT_SECRET" "web-client-secret") | nindent 12 }}
+            - name: SPRING_DATA_REDIS_HOST
+              value: {{ include "pagerewind.redisHost" $root | quote }}
+            - name: SPRING_DATA_REDIS_PORT
+              value: {{ $root.Values.redis.port | quote }}
+            {{- range $target := list "incident" "schedule" "ingest" "notify" "capture" }}
+            - name: {{ upper $target }}_URL
+              value: {{ printf "http://%s" (include "pagerewind.component" (list $root $target)) | quote }}
+            {{- end }}
+            # Behind an ingress: trust its X-Forwarded-* headers (one proxy hop).
+            - name: FORWARD_HEADERS_STRATEGY
+              value: framework
+            - name: GATEWAY_TRUSTED_PROXIES
+              value: "1"
+            - name: SESSION_COOKIE_SECURE
+              value: {{ hasPrefix "https://" $root.Values.publicUrl | quote }}
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: ecs
+            {{- end }}
+            {{- if eq $name "ingest" }}
+            - name: SPRING_DATA_REDIS_HOST
+              value: {{ include "pagerewind.redisHost" $root | quote }}
+            - name: SPRING_DATA_REDIS_PORT
+              value: {{ $root.Values.redis.port | quote }}
+            {{- include "pagerewind.secretEnv" (list $root "INGEST_ALERTMANAGER_TOKEN" "ingest-token") | nindent 12 }}
+            {{- include "pagerewind.secretEnv" (list $root "INGEST_GENERIC_TOKEN" "ingest-token") | nindent 12 }}
+            {{- end }}
+            {{- if eq $name "notify" }}
+            - name: INCIDENT_BASE_URL
+              value: {{ printf "http://%s" (include "pagerewind.component" (list $root "incident")) | quote }}
+            - name: PAGEREWIND_AUTH_TOKEN_URI
+              value: {{ printf "%s/protocol/openid-connect/token" (include "pagerewind.internalRealmUrl" $root) | quote }}
+            {{- include "pagerewind.secretEnv" (list $root "NOTIFY_CLIENT_SECRET" "notify-client-secret") | nindent 12 }}
+            - name: NOTIFY_PUBLIC_BASE_URL
+              value: {{ $svc.publicUrl | quote }}
+            - name: NOTIFY_EMAIL_FROM
+              value: {{ $svc.emailFrom | quote }}
+            - name: SPRING_MAIL_HOST
+              value: {{ include "pagerewind.mailHost" $root | quote }}
+            - name: SPRING_MAIL_PORT
+              value: {{ $root.Values.mail.port | quote }}
+            {{- include "pagerewind.secretEnv" (list $root "NOTIFY_ACTION_LINK_SECRET" "action-link-secret") | nindent 12 }}
+            {{- include "pagerewind.secretEnv" (list $root "TELEGRAM_BOT_TOKEN" "telegram-bot-token" "optional") | nindent 12 }}
+            {{- include "pagerewind.secretEnv" (list $root "TELEGRAM_WEBHOOK_SECRET" "telegram-webhook-secret" "optional") | nindent 12 }}
+            {{- end }}
+            {{- if eq $name "status" }}
+            - name: STATUS_PAGE_TITLE
+              value: {{ $svc.title | quote }}
+            - name: STATUS_SERVICES
+              value: {{ join "," $svc.services | quote }}
+            {{- end }}
+            {{- if eq $name "capture" }}
+            - name: PAGEREWIND_CAPTURE_MAX_BUFFER_SIZE
+              value: {{ $svc.maxBufferSize | quote }}
+            {{- end }}
+          securityContext:
+            {{- toYaml $root.Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          {{- include "pagerewind.springProbes" $root | nindent 10 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

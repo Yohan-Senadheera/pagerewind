@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "PageRewind chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": {"type": "object"},
+        "limits": {
+          "type": "object",
+          "required": ["memory"],
+          "description": "A memory limit is required (the cluster policy require-memory-limits refuses pods without one)."
+        }
+      },
+      "required": ["limits"]
+    },
+    "javaService": {
+      "type": "object",
+      "properties": {
+        "replicas": {"type": "integer", "minimum": 0},
+        "resources": {"$ref": "#/definitions/resources"}
+      },
+      "required": ["replicas", "resources"]
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": {"type": "string", "pattern": "^[0-9]+(Mi|Gi|Ti)$"},
+        "storageClass": {"type": "string"}
+      }
+    },
+    "url": {"type": "string", "pattern": "^https?://[^/]+"},
+    "host": {"type": "string"},
+    "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+  },
+  "properties": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "registry": {"type": "string", "minLength": 1},
+        "tag": {"type": "string"},
+        "digests": {
+          "type": "object",
+          "propertyNames": {"enum": ["gateway", "ingest", "incident", "schedule", "notify", "status", "capture"]},
+          "additionalProperties": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        },
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "imagePullSecrets": {"type": "array"},
+    "publicUrl": {"$ref": "#/definitions/url"},
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "issuer": {"type": "string", "pattern": "^https?://.+/realms/pagerewind$"},
+        "internalRealmUrl": {"type": "string", "pattern": "^$|^https?://.+/realms/pagerewind$"}
+      },
+      "required": ["issuer"]
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "existingSecret": {"type": "string"},
+        "values": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "postgres-password": {"type": "string"},
+            "rabbitmq-password": {"type": "string"},
+            "ingest-token": {"type": "string"},
+            "action-link-secret": {"type": "string"},
+            "web-client-secret": {"type": "string"},
+            "notify-client-secret": {"type": "string"},
+            "automation-client-secret": {"type": "string"},
+            "keycloak-admin-password": {"type": "string"},
+            "telegram-bot-token": {"type": "string"},
+            "telegram-webhook-secret": {"type": "string"}
+          }
+        }
+      }
+    },
+    "services": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gateway": {"$ref": "#/definitions/javaService"},
+        "ingest": {"$ref": "#/definitions/javaService"},
+        "incident": {"$ref": "#/definitions/javaService"},
+        "schedule": {"$ref": "#/definitions/javaService"},
+        "notify": {
+          "allOf": [{"$ref": "#/definitions/javaService"}],
+          "properties": {
+            "publicUrl": {"$ref": "#/definitions/url"},
+            "emailFrom": {"type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$"}
+          }
+        },
+        "status": {
+          "allOf": [{"$ref": "#/definitions/javaService"}],
+          "properties": {
+            "title": {"type": "string"},
+            "services": {"type": "array", "items": {"type": "string", "pattern": "^[^,]+$"}}
+          }
+        }
+      },
+      "required": ["gateway", "ingest", "incident", "schedule", "notify", "status"]
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "replicas": {"type": "integer", "minimum": 0, "maximum": 1, "description": "The flight recorder keeps its buffer in memory; run one."},
+        "maxBufferSize": {"type": "string", "pattern": "^[0-9]+(KB|MB|GB)$"},
+        "rbac": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"create": {"type": "boolean"}}
+        },
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "podSecurityContext": {"type": "object"},
+    "containerSecurityContext": {"type": "object"},
+    "postgresql": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bundled": {"type": "boolean"},
+        "image": {"type": "string"},
+        "host": {"$ref": "#/definitions/host"},
+        "port": {"$ref": "#/definitions/port"},
+        "database": {"type": "string", "minLength": 1},
+        "username": {"type": "string", "minLength": 1},
+        "persistence": {"$ref": "#/definitions/persistence"},
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "rabbitmq": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bundled": {"type": "boolean"},
+        "image": {"type": "string"},
+        "host": {"$ref": "#/definitions/host"},
+        "port": {"$ref": "#/definitions/port"},
+        "username": {"type": "string", "minLength": 1},
+        "persistence": {"$ref": "#/definitions/persistence"},
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "redis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bundled": {"type": "boolean"},
+        "image": {"type": "string"},
+        "host": {"$ref": "#/definitions/host"},
+        "port": {"$ref": "#/definitions/port"},
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "mail": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bundled": {"type": "boolean"},
+        "image": {"type": "string"},
+        "host": {"$ref": "#/definitions/host"},
+        "port": {"$ref": "#/definitions/port"},
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "keycloak": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bundled": {"type": "boolean"},
+        "image": {"type": "string"},
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "className": {"type": "string"},
+        "annotations": {"type": "object", "additionalProperties": {"type": "string"}},
+        "hosts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "app": {"$ref": "#/definitions/host"},
+            "auth": {"$ref": "#/definitions/host"},
+            "status": {"$ref": "#/definitions/host"},
+            "ingest": {"$ref": "#/definitions/host"},
+            "notify": {"$ref": "#/definitions/host"}
+          }
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["secretName", "hosts"],
+            "properties": {
+              "secretName": {"type": "string"},
+              "hosts": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+apiVersion: v2
+name: pagerewind
+description: >-
+  Self-hosted on-call and incident platform for Kubernetes. Turns alerts into incidents, pages the
+  on-call person, and records what was happening in the cluster when the alert fired.
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://github.com/Yohan-Senadheera/pagerewind
+sources:
+  - https://github.com/Yohan-Senadheera/pagerewind
+keywords:
+  - on-call
+  - incident
+  - alerting
+  - sre
+  - kubernetes
+maintainers:
+  - name: Yohan Senadheera
+    url: https://github.com/Yohan-Senadheera
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/Yohan-Senadheera/pagerewind

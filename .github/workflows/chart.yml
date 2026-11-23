@@ -1,0 +1,159 @@
+name: Helm chart
+
+# Lints the chart, checks the rendered manifests against Kubernetes schemas and the cluster's Kyverno
+# policies, installs it on a fresh kind cluster and runs scripts/chart-smoke.sh. On a v* tag it also
+# publishes the chart to GHCR as an OCI artifact and signs it.
+
+on:
+  pull_request:
+    paths:
+      - "charts/**"
+      - "deploy/keycloak/**"
+      - "platform/policies/**"
+      - "scripts/chart-smoke.sh"
+      - "scripts/send-test-alert.sh"
+      - ".github/workflows/chart.yml"
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "charts/**"
+      - "deploy/keycloak/**"
+      - ".github/workflows/chart.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CHART: charts/pagerewind
+  KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.8.0
+  KYVERNO_CLI_IMAGE: ghcr.io/kyverno/kyverno-cli:v1.19.2
+  YQ_IMAGE: mikefarah/yq:4.48.1
+  KIND_VERSION: v0.33.0
+
+jobs:
+  lint:
+    name: Lint and policy check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The chart's realm file matches deploy/keycloak
+        run: |
+          cmp deploy/keycloak/pagerewind-realm.json "$CHART/files/pagerewind-realm.json" \
+            || { echo "Copy deploy/keycloak/pagerewind-realm.json to $CHART/files/"; exit 1; }
+
+      - name: helm lint (default and production-style values)
+        run: |
+          helm lint "$CHART" --strict
+          helm lint "$CHART" --strict -f "$CHART/ci/external-values.yaml"
+
+      - name: Rendered manifests match the Kubernetes schemas
+        run: |
+          mkdir -p out
+          helm template pagerewind "$CHART" -n pagerewind > out/default.yaml
+          helm template pagerewind "$CHART" -n pagerewind -f "$CHART/ci/external-values.yaml" > out/external.yaml
+          docker run --rm -v "$PWD/out:/out" "$KUBECONFORM_IMAGE" -strict -summary /out/default.yaml /out/external.yaml
+
+      - name: Pods pass the cluster's Kyverno policies
+        run: |
+          # The policies check pods; turn each workload's pod template into a pod.
+          docker run --rm -v "$PWD/out:/out" -w /out "$YQ_IMAGE" \
+            'select(.kind == "Deployment" or .kind == "StatefulSet")
+              | {"apiVersion": "v1", "kind": "Pod", "metadata": {"name": .metadata.name, "namespace": "pagerewind"},
+                 "spec": .spec.template.spec}' default.yaml > out/pods.yaml
+          cat > out/values.yaml <<'EOF'
+          apiVersion: cli.kyverno.io/v1alpha1
+          kind: Value
+          metadata:
+            name: values
+          namespaceSelector:
+            - name: pagerewind
+              labels:
+                kubernetes.io/metadata.name: pagerewind
+          EOF
+          cp platform/policies/require-non-root.yaml platform/policies/require-memory-limits.yaml \
+            platform/policies/require-probes.yaml platform/policies/disallow-host-network.yaml out/
+          docker run --rm -v "$PWD/out:/out" -w /out "$KYVERNO_CLI_IMAGE" apply \
+            require-non-root.yaml require-memory-limits.yaml require-probes.yaml disallow-host-network.yaml \
+            --resource pods.yaml --values-file values.yaml | tee out/kyverno.txt
+          grep -qE "fail: 0, warn: 0, error: 0" out/kyverno.txt
+          ! grep -q "pass: 0," out/kyverno.txt
+
+  install:
+    name: Install on kind
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create a kind cluster
+        run: |
+          curl -fsSLo kind "https://kind.sigs.k8s.io/dl/$KIND_VERSION/kind-linux-amd64"
+          chmod +x kind
+          ./kind create cluster --name pagerewind --wait 120s
+          kubectl get nodes
+
+      - name: helm install (latest main images)
+        run: |
+          kubectl create namespace pagerewind
+          helm install pagerewind "$CHART" -n pagerewind --set image.tag=main --set ingress.enabled=false \
+            --wait --timeout 15m
+
+      - name: Smoke test
+        run: scripts/chart-smoke.sh pagerewind pagerewind
+
+      - name: helm upgrade keeps the generated secrets
+        run: |
+          before=$(kubectl -n pagerewind get secret pagerewind-secrets -o jsonpath='{.data}' | sha256sum)
+          helm upgrade pagerewind "$CHART" -n pagerewind --set image.tag=main --set ingress.enabled=false \
+            --wait --timeout 10m
+          after=$(kubectl -n pagerewind get secret pagerewind-secrets -o jsonpath='{.data}' | sha256sum)
+          [ "$before" = "$after" ] || { echo "helm upgrade changed the generated secrets"; exit 1; }
+          echo "Secrets unchanged after upgrade"
+
+      - name: Show the state on failure
+        if: failure()
+        run: |
+          kubectl -n pagerewind get pods -o wide || true
+          kubectl -n pagerewind get events --sort-by=.lastTimestamp | tail -40 || true
+          for d in $(kubectl -n pagerewind get deploy -o name); do
+            echo "== $d"; kubectl -n pagerewind logs "$d" --tail=40 || true
+          done
+
+  publish:
+    name: Publish to GHCR
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+
+      - name: Package, push and sign
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          REF_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          owner=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
+          version="${REF_NAME#v}"
+          chart_version=$(grep '^version:' "$CHART/Chart.yaml" | awk '{print $2}')
+          [ "$chart_version" = "$version" ] || { echo "Chart.yaml version $chart_version does not match tag $REF_NAME"; exit 1; }
+          echo "$GH_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm package "$CHART"
+          helm push "pagerewind-$version.tgz" "oci://ghcr.io/$owner/charts" 2>&1 | tee push.txt
+          digest=$(grep -oE 'sha256:[0-9a-f]{64}' push.txt | head -1)
+          echo "$GH_TOKEN" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cosign sign --yes "ghcr.io/$owner/charts/pagerewind@$digest"

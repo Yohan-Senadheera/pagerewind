@@ -1,0 +1,47 @@
+{{- if .Values.capture.enabled }}
+{{- $component := include "pagerewind.component" (list . "capture") }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+{{- if .Values.capture.rbac.create }}
+---
+# Read-only: the flight recorder lists and watches; it never changes anything and cannot read Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "pods/log", "events", "configmaps", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $component }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $component }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
