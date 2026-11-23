@@ -1,5 +1,6 @@
 # Demo workload for the flight recorder. The namespace is labelled so capture records its logs.
-# selfHeal is off so a deliberate bad deploy (demo.ps1 bad-deploy) is not undone by Argo CD.
+# A deliberate bad deploy (demo.ps1 bad-deploy) must stay until demo.ps1 fix-deploy: selfHeal is off, and
+# the image and command are ignored when comparing, so a sync for a new commit does not undo it either.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,12 +15,20 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: demo
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: checkout
+      jqPathExpressions:
+        - .spec.template.spec.containers[].image
+        - .spec.template.spec.containers[].args
   syncPolicy:
     automated:
       prune: true
       selfHeal: false
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
     managedNamespaceMetadata:
       labels:
         pagerewind.dev/record: "true"
