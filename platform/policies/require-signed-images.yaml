@@ -1,5 +1,6 @@
 # PageRewind images must be signed by this repository's images workflow (on main or a release tag).
 # An image pushed by hand, built by a fork or altered in the registry has no such signature and is refused.
+# Deny since 24 Nov 2026, after the audit showed every running PageRewind pod passing (pinned by digest).
 # Keyless: the signature carries a short-lived certificate from Sigstore that names the GitHub workflow,
 # and the signature is recorded in Sigstore's public transparency log. No key to store or rotate.
 apiVersion: policies.kyverno.io/v1
@@ -10,7 +11,7 @@ metadata:
     policies.kyverno.io/title: Require PageRewind images signed by CI
     policies.kyverno.io/severity: high
 spec:
-  validationActions: [Audit]
+  validationActions: [Deny]
   evaluation:
     background:
       enabled: true
