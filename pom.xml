@@ -41,6 +41,8 @@
     <properties>
         <java.version>21</java.version>
         <springdoc.version>3.2.0</springdoc.version>
+        <!-- Spring Boot 4.1.2 pins 5.30.0, which has fixed HIGH CVEs (CVE-2026-63337, -69219, -69220, -75516). -->
+        <rabbit-amqp-client.version>5.38.0</rabbit-amqp-client.version>
     </properties>
 
     <dependencyManagement>
