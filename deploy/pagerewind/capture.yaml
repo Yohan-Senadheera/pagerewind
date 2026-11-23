@@ -71,7 +71,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: capture
-          image: ghcr.io/yohan-senadheera/pagerewind-capture:sha-1540e7c
+          image: ghcr.io/yohan-senadheera/pagerewind-capture:sha-feb79db
           ports:
             - containerPort: 8080
           envFrom:
