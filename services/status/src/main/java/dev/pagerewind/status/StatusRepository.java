@@ -73,6 +73,22 @@ public class StatusRepository {
                 .list();
     }
 
+    /** Incidents opened since {@code since} for known services, newest first. */
+    public List<PastIncident> incidentsSince(Instant since, int limit) {
+        return jdbc.sql("""
+                        SELECT service, severity, opened_at, resolved_at FROM status_incident
+                         WHERE service IS NOT NULL AND opened_at >= :since
+                         ORDER BY opened_at DESC LIMIT :limit""")
+                .param("since", db(since)).param("limit", limit)
+                .query((rs, row) -> {
+                    OffsetDateTime opened = rs.getObject("opened_at", OffsetDateTime.class);
+                    OffsetDateTime resolved = rs.getObject("resolved_at", OffsetDateTime.class);
+                    return PastIncident.of(rs.getString("service"), Severity.valueOf(rs.getString("severity")),
+                            opened == null ? null : opened.toInstant(), resolved == null ? null : resolved.toInstant());
+                })
+                .list();
+    }
+
     /** Every service that ever had an incident. */
     public List<String> knownServices() {
         return jdbc.sql("SELECT DISTINCT service FROM status_incident WHERE service IS NOT NULL ORDER BY service")
