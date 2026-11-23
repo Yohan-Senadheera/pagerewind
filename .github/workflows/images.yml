@@ -177,10 +177,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="sha-${GITHUB_SHA::7}"
-          file=deploy/pagerewind/kustomization.yaml
-          sed -i -E "s/^(    newTag: )sha-[0-9a-f]{7}$/\1$tag/" "$file"
+          scripts/pin-images.sh "$tag" "$GITHUB_REPOSITORY_OWNER"
           if git diff --quiet; then echo "Already on $tag"; exit 0; fi
-          if [ "$(grep -c "newTag: $tag" "$file")" -ne 7 ]; then echo "Expected 7 images on $tag"; exit 1; fi
 
           branch="deploy-${GITHUB_SHA::7}"
           git config user.name "github-actions[bot]"
@@ -190,7 +188,7 @@ jobs:
           git push origin "$branch"
 
           cat > body.md <<EOF
-          Moves all PageRewind services to \`$tag\` (built from $GITHUB_SHA).
+          Moves all PageRewind services to \`$tag\` (built from $GITHUB_SHA), pinned by digest.
 
           Every image passed the Trivy gate, is signed by this repository's images workflow on main,
           and carries a signed SPDX SBOM. Argo CD rolls it out after the merge.

@@ -19,19 +19,19 @@ resources:
   - capture.yaml
   - external-secret.yaml
   - ingress.yaml
-# One version for every PageRewind image. sha-feb79db is main after #54 (rollback vs re-deploy in the likely cause).
+# One build for every PageRewind image, pinned by digest. Set by scripts/pin-images.sh in the deploy pull request.
 images:
   - name: ghcr.io/yohan-senadheera/pagerewind-gateway
-    newTag: sha-41a4f5b
+    newTag: sha-41a4f5b@sha256:e81ded31d7aa5be7dba922ecc4862e06e5a59efc8c2732176cd5a28efc224a8b
   - name: ghcr.io/yohan-senadheera/pagerewind-ingest
-    newTag: sha-41a4f5b
+    newTag: sha-41a4f5b@sha256:c98ad52280e07f935169ea2bdacbe10d683c2800e421c11b4a1339dd4d78d8de
   - name: ghcr.io/yohan-senadheera/pagerewind-incident
-    newTag: sha-41a4f5b
+    newTag: sha-41a4f5b@sha256:aae0d0a0540c8184c44996afbe19518ab0415e666b8ae64180e93165f99badaa
   - name: ghcr.io/yohan-senadheera/pagerewind-schedule
-    newTag: sha-41a4f5b
+    newTag: sha-41a4f5b@sha256:075fdc544f6fa12a1d895eed225db62bb301475c2e60c0d6f7b398801d1bd9e8
   - name: ghcr.io/yohan-senadheera/pagerewind-notify
-    newTag: sha-41a4f5b
+    newTag: sha-41a4f5b@sha256:b8876cac2122d2dd854fa334e054100581915c46c85c643f037569af3e9e6ac9
   - name: ghcr.io/yohan-senadheera/pagerewind-status
-    newTag: sha-41a4f5b
+    newTag: sha-41a4f5b@sha256:f2a31cf8c5a8f0925f1d3785ea39c7f0a5e01561917e5db0d286e673be10a9f3
   - name: ghcr.io/yohan-senadheera/pagerewind-capture
-    newTag: sha-41a4f5b
+    newTag: sha-41a4f5b@sha256:9d18f27c65df59f79d233c803023eef2bc2a02a52e1514a492ad699dc0a6c7e5
