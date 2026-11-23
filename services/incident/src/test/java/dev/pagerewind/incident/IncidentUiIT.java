@@ -83,6 +83,29 @@ class IncidentUiIT extends IntegrationTest {
     }
 
     @Test
+    void repeatsOfTheSameAlertAreCountedWithTheirTimes() throws Exception {
+        String fingerprint = newFingerprint();
+        service.handleAlert(alert(fingerprint));
+        service.handleAlert(alert(fingerprint));
+        service.handleAlert(alert(fingerprint));
+        UUID id = jdbc.sql("SELECT id FROM incident WHERE fingerprint = ?").param(fingerprint).query(UUID.class).single();
+
+        String page = get("/ui/incidents/" + id).body();
+
+        assertThat(page).contains("Occurrences").contains("This alert arrived <strong>3 times</strong>")
+                .contains("· first <time class=\"local\"").contains("· last <time class=\"local\"");
+        assertThat(page.split("<td>[0-9]+</td>", -1)).as("one row per occurrence").hasSize(4);
+        assertThat(service.get(id).alertCount()).isEqualTo(3);
+    }
+
+    @Test
+    void aSingleAlertSaysOnce() throws Exception {
+        UUID id = open("Checkout 5xx above 5%");
+        assertThat(get("/ui/incidents/" + id).body()).contains("This alert arrived <strong>once</strong>")
+                .doesNotContain("· first ");
+    }
+
+    @Test
     void unknownIncidentIs404() throws Exception {
         assertThat(get("/ui/incidents/" + UUID.randomUUID()).statusCode()).isEqualTo(404);
     }

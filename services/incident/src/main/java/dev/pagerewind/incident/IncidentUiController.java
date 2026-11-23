@@ -40,6 +40,7 @@ public class IncidentUiController {
         model.addAttribute("incident", service.get(id));
         List<TimelineEntry> timeline = service.timeline(id);
         model.addAttribute("timeline", timeline);
+        model.addAttribute("occurrences", Occurrences.of(timeline));
         // The newest evidence, if the flight recorder captured any for this incident.
         model.addAttribute("evidence", timeline.stream()
                 .filter(e -> e.type() == TimelineEntry.Type.EVIDENCE)

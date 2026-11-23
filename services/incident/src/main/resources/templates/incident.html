@@ -14,7 +14,8 @@
         <span th:text="${i.service()}">service</span>
         · <span class="muted" th:text="${i.alertCount()} + ' alerts'">1 alerts</span>
     </p>
-    <p class="muted">Incident <code th:text="${i.id()}">id</code> · opened <time th:text="${i.createdAt()}">time</time></p>
+    <p class="muted">Incident <code th:text="${i.id()}">id</code> · opened
+        <time class="local" th:datetime="${i.createdAt()}" th:text="${i.createdAt()}">time</time></p>
 
     <div class="actions" th:if="${i.status().isOpen() and canRespond}">
         <form th:if="${i.status().name() == 'TRIGGERED'}" method="post" th:action="@{/ui/incidents/{id}/acknowledge(id=${i.id()})}">
@@ -39,13 +40,38 @@
 
     <p class="muted" th:if="${i.status().isOpen() and !canRespond}">You can view incidents. Ask an admin for the responder role to acknowledge or resolve them.</p>
 
+    <section th:if="${occurrences.count() > 0}" th:with="o=${occurrences}">
+        <h2>Occurrences</h2>
+        <p>
+            This alert arrived <strong th:text="${o.count() == 1} ? 'once' : ${o.count()} + ' times'">3 times</strong>
+            <span th:if="${o.count() > 1}">· first <time class="local" th:datetime="${o.first()}" th:text="${o.first()}">first</time>
+                · last <time class="local" th:datetime="${o.last()}" th:text="${o.last()}">last</time></span>
+        </p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Received</th><th>Started at the source</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="t : ${o.times()}">
+                    <td th:text="${t.number()}">1</td>
+                    <td><time class="local" th:datetime="${t.receivedAt()}" th:text="${t.receivedAt()}">time</time></td>
+                    <td class="muted">
+                        <time class="local" th:if="${t.startedAt() != null}" th:datetime="${t.startedAt()}" th:text="${t.startedAt()}">time</time>
+                        <span th:if="${t.startedAt() == null}">unknown</span>
+                    </td>
+                    <td class="muted" th:text="${t.repeat()} ? 'repeat' : ''"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
     <h2>Timeline</h2>
     <div class="table-wrap">
         <table>
             <thead><tr><th>Time</th><th>Event</th><th>By</th><th>Details</th></tr></thead>
             <tbody>
             <tr th:each="e : ${timeline}">
-                <td class="muted"><time th:text="${e.occurredAt()}">time</time></td>
+                <td class="muted"><time class="local" th:datetime="${e.occurredAt()}" th:text="${e.occurredAt()}">time</time></td>
                 <td th:text="${e.type()}">ALERT</td>
                 <td th:text="${e.actor()}">actor</td>
                 <td>
@@ -57,5 +83,16 @@
         </table>
     </div>
 </main>
+<script>
+    // Show times in the reader's own time zone; the server sends UTC.
+    document.querySelectorAll('time.local').forEach(function (t) {
+        var d = new Date(t.getAttribute('datetime'));
+        if (!isNaN(d)) {
+            t.title = t.getAttribute('datetime');
+            t.textContent = d.toLocaleString(undefined, {year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short'});
+        }
+    });
+</script>
 </body>
 </html>
