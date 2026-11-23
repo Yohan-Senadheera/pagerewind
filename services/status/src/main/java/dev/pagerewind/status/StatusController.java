@@ -1,6 +1,7 @@
 package dev.pagerewind.status;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -17,7 +18,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 public class StatusController {
 
     public record StatusView(String title, ServiceStatus.Level overall, String overallLabel, List<ServiceStatus> services,
-            Instant generatedAt) {
+            int historyDays, List<PastIncident> history, Instant generatedAt) {
     }
 
     private final StatusRepository repository;
@@ -35,7 +36,9 @@ public class StatusController {
         known.addAll(repository.knownServices());
         List<ServiceStatus> services = ServiceStatus.compute(List.copyOf(known), repository.openIncidents());
         ServiceStatus.Level overall = ServiceStatus.overall(services);
-        return new StatusView(properties.title(), overall, overall.label(), services, clock.instant());
+        Instant now = clock.instant();
+        List<PastIncident> history = repository.incidentsSince(now.minus(Duration.ofDays(properties.historyDays())), 50);
+        return new StatusView(properties.title(), overall, overall.label(), services, properties.historyDays(), history, now);
     }
 
     @GetMapping("/")

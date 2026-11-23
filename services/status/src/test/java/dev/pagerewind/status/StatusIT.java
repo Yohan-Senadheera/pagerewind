@@ -130,6 +130,35 @@ class StatusIT {
     }
 
     @Test
+    void pastIncidentsAreListedWithImpactAndDurationButNoAlertText() throws Exception {
+        UUID resolved = UUID.randomUUID();
+        publish(triggered(resolved, "api", Severity.CRITICAL));
+        publish(new IncidentResolved(UUID.randomUUID(), Instant.now(), 1, resolved, "alice"));
+        UUID open = UUID.randomUUID();
+        publish(triggered(open, "website", Severity.WARNING));
+        await().atMost(WAIT).untilAsserted(() -> assertThat(
+                jdbc.sql("SELECT count(*) FROM status_incident").query(Long.class).single()).isEqualTo(2));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> history = (List<Map<String, Object>>) status().get("history");
+        assertThat(history).hasSize(2);
+        assertThat(history).anySatisfy(h -> {
+            assertThat(h).containsEntry("service", "api").containsEntry("impact", "MAJOR_OUTAGE");
+            assertThat(h.get("resolvedAt")).isNotNull();
+            assertThat(h.get("duration")).isEqualTo("under a minute");
+        });
+        assertThat(history).anySatisfy(h -> {
+            assertThat(h).containsEntry("service", "website").containsEntry("impact", "DEGRADED");
+            assertThat(h.get("resolvedAt")).isNull();
+        });
+        assertThat(history).allSatisfy(h -> assertThat(h).doesNotContainKeys("incidentId", "summary", "labels"));
+
+        String page = get("/").body();
+        assertThat(page).contains("Past 14 days").contains("· ongoing").contains("under a minute")
+                .doesNotContain("db-primary-7").doesNotContain(resolved.toString());
+    }
+
+    @Test
     void healthAndMetrics() throws Exception {
         assertThat(get("/actuator/health/readiness").statusCode()).isEqualTo(200);
         assertThat(get("/actuator/prometheus").statusCode()).isEqualTo(200);
