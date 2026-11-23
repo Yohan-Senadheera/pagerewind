@@ -72,6 +72,38 @@ class ChangeRankingTest {
                 .containsExactly("(same workload)", "(same namespace)", "(cluster-wide)", "(another namespace)");
     }
 
+    private static ChangeEvent image(int minutesBefore, String from, String to) {
+        return ChangeEvent.of(ALERT.minus(Duration.ofMinutes(minutesBefore)), Kind.IMAGE, "demo", "checkout", "checkout",
+                "Deployment checkout changed image of container app to " + to, Map.of("container", "app", "from", from, "to", to));
+    }
+
+    @Test
+    void aRollbackIsNotTheLikelyCauseAndTheRevertedChangeSaysSo() {
+        ChangeEvent bad = image(29, "busybox:1.37", "busybox:1.36");
+        ChangeEvent rollback = image(28, "busybox:1.36", "busybox:1.37");
+
+        List<Ranked> ranked = ranking.rank(List.of(rollback, bad), new Target("demo", "checkout"), ALERT);
+
+        assertThat(ranked.get(0).change()).isEqualTo(bad);
+        assertThat(ranked.get(0).reason()).endsWith("(same workload); reverted 1 minute later");
+        assertThat(ranked.get(1).change()).isEqualTo(rollback);
+        assertThat(ranked.get(1).reason()).endsWith("(same workload); this was a rollback");
+    }
+
+    @Test
+    void aBadDeployThatIsStillLiveScoresHigherThanOneThatWasReverted() {
+        ChangeEvent live = image(5, "busybox:1.37", "busybox:1.36");
+        ChangeEvent reverted = image(5, "busybox:1.37", "busybox:1.36");
+        ChangeEvent rollback = image(3, "busybox:1.36", "busybox:1.37");
+        Target target = new Target("demo", "checkout");
+
+        double liveScore = ranking.rank(List.of(live), target, ALERT).getFirst().score();
+        double revertedScore = ranking.rank(List.of(reverted, rollback), target, ALERT).stream()
+                .filter(r -> r.change().equals(reverted)).findFirst().orElseThrow().score();
+
+        assertThat(revertedScore).isLessThan(liveScore);
+    }
+
     @Test
     void noChangesMeansNoLikelyCause() {
         assertThat(ranking.likelyCause(List.of(), new Target("shop", "checkout"), ALERT)).isEmpty();
