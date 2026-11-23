@@ -91,9 +91,18 @@ jobs:
         env:
           SERVICE: ${{ matrix.service }}
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/" \
-            "$TRIVY_IMAGE" image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
-            --exit-code 1 --timeout 15m "candidate/$SERVICE:$GITHUB_SHA"
+          # Exit code 1 means findings and fails at once. Any other failure (seen: the vulnerability
+          # database download cut off) is retried, so a network hiccup does not block a release.
+          for attempt in 1 2 3; do
+            code=0
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/" \
+              "$TRIVY_IMAGE" image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+              --exit-code 1 --timeout 15m "candidate/$SERVICE:$GITHUB_SHA" || code=$?
+            if [ "$code" -le 1 ]; then exit "$code"; fi
+            echo "Scan could not run (exit $code), attempt $attempt of 3"
+            sleep $((attempt * 20))
+          done
+          exit 1
 
       - uses: docker/login-action@v3
         with:
@@ -146,3 +155,53 @@ jobs:
           name: sbom-${{ matrix.service }}
           path: sbom-${{ matrix.service }}.spdx.json
           retention-days: 30
+
+  deploy-pr:
+    name: Open the deploy pull request
+    # Only for main. Releases (v* tags) are deployed on purpose, not automatically.
+    if: github.ref == 'refs/heads/main'
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: deploy-pr
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Point deploy/pagerewind at the new images and open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="sha-${GITHUB_SHA::7}"
+          file=deploy/pagerewind/kustomization.yaml
+          sed -i -E "s/^(    newTag: )sha-[0-9a-f]{7}$/\1$tag/" "$file"
+          if git diff --quiet; then echo "Already on $tag"; exit 0; fi
+          if [ "$(grep -c "newTag: $tag" "$file")" -ne 7 ]; then echo "Expected 7 images on $tag"; exit 1; fi
+
+          branch="deploy-${GITHUB_SHA::7}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Deploy $tag"
+          git push origin "$branch"
+
+          cat > body.md <<EOF
+          Moves all PageRewind services to \`$tag\` (built from $GITHUB_SHA).
+
+          Every image passed the Trivy gate, is signed by this repository's images workflow on main,
+          and carries a signed SPDX SBOM. Argo CD rolls it out after the merge.
+
+          Opened by the Container images workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          EOF
+          gh pr create --base main --head "$branch" --title "Deploy $tag" --body-file body.md
+
+          # Older deploy pull requests are now out of date.
+          gh pr list --state open --json number,headRefName \
+            -q ".[] | select(.headRefName | startswith(\"deploy-\")) | select(.headRefName != \"$branch\") | .number" |
+            while read -r old; do
+              gh pr close "$old" --delete-branch --comment "Superseded by $tag."
+            done
