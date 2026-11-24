@@ -1,13 +1,13 @@
 # Architecture
 
-Status: planned. This page describes the design; it is updated as each part is built.
+Status: matches v0.2.0 (24 Nov 2026). Parts not built yet are marked as planned.
 
 PageRewind has two parts:
 
 1. **The product:** the PageRewind services that users install (Docker Compose or Helm). No cloud
    provider is required.
 2. **The reference deployment:** how the project itself is built, tested, deployed and monitored on
-   AWS. Users do not need it; it lives in `deploy/reference/`.
+   AWS. Users do not need it; it lives in `infra/`, `platform/` and `deploy/pagerewind/`.
 
 ## 1. Big picture
 
@@ -112,9 +112,7 @@ flowchart TB
     SCH --- PG
     NOT --- PG
     CAP --- PG
-    CAP --- S3[("S3 / MinIO<br/>evidence bundles")]
     CAP -->|"watch (read-only)"| K8S["Kubernetes API"]
-    CAP -->|query| PROM["Prometheus"]
     NOT --> TG["Telegram / SMTP"]
 
     KC["Keycloak"] -.->|"tokens for users and services"| GW
@@ -174,15 +172,19 @@ flowchart LR
         C["Watch Deployments, ReplicaSets,<br/>ConfigMaps, HPA, nodes, Argo CD"] --> CE[("change_event table<br/>7 days")]
     end
 
-    ALERT["IncidentTriggered"] --> F["Freeze matching buffers<br/>+ previous-container logs<br/>+ metrics snapshot"]
+    ALERT["IncidentTriggered"] --> F["Freeze matching buffers<br/>(incl. deleted pods' last lines)"]
     RB --> F
-    F --> B[("Evidence bundle in S3")]
+    F --> B[("Evidence bundle (zip)<br/>in PostgreSQL, 30 days")]
 
     ALERT --> Q["Changes in the hour before"]
     CE --> Q
     Q --> RANK["Rank: same workload > same namespace > cluster,<br/>closer in time = higher"]
     RANK --> LC["Likely cause on the incident"]
 ```
+
+Ranking also reads each container's image history in time order, so a revert, a rollback and the
+re-deploy of an image that was rolled back earlier are scored differently. Planned, not built: Kubernetes
+events and previous-container logs in the bundle, a metrics snapshot, evidence in S3.
 
 ## 5. Reference deployment (platform)
 
@@ -193,35 +195,42 @@ flowchart LR
     Dev["Developer"] -->|pull request| GH["GitHub"]
 
     subgraph CI["GitHub Actions"]
-        T["Build + tests<br/>(Testcontainers)"] --> S["Scan: Trivy, gitleaks<br/>SBOM, cosign sign"]
+        T["Build + tests<br/>(Testcontainers), gitleaks"] --> S["Trivy gate, cosign sign,<br/>signed SBOM"]
     end
     GH --> CI
     S -->|images| GHCR["GHCR"]
-    S -->|"update image tag"| GIT["deploy/ in Git"]
+    S -->|"deploy pull request<br/>(tag@digest)"| GIT["deploy/ in Git"]
 
     TF["Terraform"] -->|"VPC, EC2, IAM, S3"| AWS
 
     subgraph AWS["AWS (ap-southeast-2)"]
         subgraph K3S["k3s on EC2"]
-            ARGO["Argo CD"] --> PRODNS["pagerewind (prod)<br/>Argo Rollouts canary"]
-            ARGO --> PREV["pr-N preview namespaces"]
-            MON["Prometheus, Grafana,<br/>Loki, Tempo"]
-            POL["Kyverno, cert-manager,<br/>External Secrets, Linkerd"]
+            ARGO["Argo CD"] --> PRODNS["pagerewind<br/>status: Argo Rollouts canary"]
+            MON["Prometheus, Alertmanager,<br/>Grafana"]
+            POL["Kyverno (signed images only),<br/>cert-manager, External Secrets,<br/>Istio ambient (mTLS), Keycloak"]
+            BJ["Backup CronJobs"]
         end
         SM["Secrets Manager"]
-        BK[("S3: backups, evidence")]
+        BK[("S3: database backups")]
     end
 
     GIT --> ARGO
     GHCR --> PRODNS
     MON -->|"SLO burn alerts"| PRODNS
-    MON -.->|"watchdog ping"| HC["healthchecks.io"]
+    MON -.->|"watchdog ping,<br/>critical self-alerts"| HC["healthchecks.io"]
     SM --> POL
+    BJ --> BK
 ```
 
 - **GitOps:** Git holds what should run; Argo CD makes the cluster match.
-- **Preview environments:** every pull request gets its own namespace and database.
-- **Canary releases:** a new version gets 10% of traffic first; if errors or latency rise, Argo
-  Rollouts rolls back automatically.
-- **Monitors itself:** PageRewind's own SLO alerts are sent to PageRewind; an external watchdog
-  emails if the whole system goes silent.
+- **Supply chain:** every image is scanned, signed keylessly and carries a signed SBOM; Kyverno lets only
+  images signed by this repository's CI run; deploys pin images by digest.
+- **Canary releases:** a new `status` version gets one of two pods; Prometheus checks its error rate and
+  Argo Rollouts rolls back automatically above 5%.
+- **Monitors itself:** SLO burn-rate alerts and processing-failure alerts go to PageRewind; critical
+  ones also to healthchecks.io, which emails without depending on PageRewind; an always-firing
+  Watchdog makes healthchecks.io email if alerting goes silent.
+- **Backups:** pg_dump to S3 every 6 hours (the cluster cannot delete them); a weekly restore test.
+- Planned, not built: preview environments per pull request, logs and traces (Loki, Tempo).
+
+Runbooks: [runbooks/](runbooks/). Drill write-ups: [postmortems/](postmortems/).

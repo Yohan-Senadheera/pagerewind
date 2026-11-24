@@ -16,7 +16,7 @@ and **3 alerts were parked in a dead-letter queue** and only processed after a m
 | 21:33:36 | Test alerts start (one fingerprint, every 15 s) |
 | 21:33:54 | Istio AuthorizationPolicy denies all connections to `postgres-0`; 45 open connections closed |
 | 21:34 to 21:39 | incident, schedule, notify, capture log connection errors; ingest keeps answering 202 |
-| 21:34 to 21:39 | No incident events written; RabbitMQ holds the alerts; 3 messages exceed 4 delivery attempts and go to `incident.alerts.dlq` |
+| 21:34 to 21:39 | No incident events written; RabbitMQ holds the alerts; 3 messages use up their 5 delivery attempts (delivery limit 4) and go to `incident.alerts.dlq` |
 | 21:39:01 | Policy removed |
 | 21:39 | 20 queued alerts processed within the minute |
 | 21:41 | Check: incident shows 26 of 29 accepted alerts; no alert fired except generic warnings (TargetDown, KubeMemoryOvercommit, routed nowhere) |
@@ -35,7 +35,7 @@ and **3 alerts were parked in a dead-letter queue** and only processed after a m
    attempts, but no alert watched those counters.
 2. **Even with such an alert, PageRewind could not have delivered it**: its own alerts go through its own
    pipeline, which was the broken part.
-3. **Retries were used up in seconds.** Four immediate redeliveries do not span a database blip of a few
+3. **Retries were used up in seconds.** Five immediate deliveries do not span a database blip of a few
    minutes, so messages were dead-lettered, and nothing watched the dead-letter queues.
 
 ## Things learned while setting the drill up

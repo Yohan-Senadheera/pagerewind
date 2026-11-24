@@ -42,7 +42,7 @@ kubectl -n pagerewind describe pod postgres-0 | tail -20    # OOMKilled? disk fu
 
 ## Replay dead letters
 
-A message that fails 4 times goes to `<queue>.dlq`. After the cause is fixed, check and move them back:
+A message that fails 5 times (delivery limit 4) goes to `<queue>.dlq`. After the cause is fixed, check and move them back:
 
 ```bash
 kubectl -n pagerewind exec rabbitmq-0 -- rabbitmqctl list_queues -q name messages | grep dlq
