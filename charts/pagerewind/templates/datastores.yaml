@@ -1,0 +1,329 @@
+{{- /* Small single-instance data stores for trying PageRewind out. Production: bundled: false. */ -}}
+{{- $root := . }}
+{{- $dropAll := dict "allowPrivilegeEscalation" false "capabilities" (dict "drop" (list "ALL")) }}
+{{- if .Values.postgresql.bundled }}
+{{- $name := include "pagerewind.component" (list . "postgresql") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "pagerewind.selector" (list . "postgresql") | nindent 4 }}
+  ports:
+    - name: postgres
+      port: {{ .Values.postgresql.port }}
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.labels" . | nindent 4 }}
+    {{- include "pagerewind.selector" (list . "postgresql") | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pagerewind.selector" (list . "postgresql") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pagerewind.selector" (list . "postgresql") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ .Values.postgresql.image }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.username | quote }}
+            {{- include "pagerewind.secretEnv" (list . "POSTGRES_PASSWORD" "postgres-password") | nindent 12 }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          securityContext:
+            {{- toYaml $dropAll | nindent 12 }}
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgresql.username | quote }}, "-d", {{ .Values.postgresql.database | quote }}]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgresql.username | quote }}, "-d", {{ .Values.postgresql.database | quote }}]
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+      volumes:
+        - name: run
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.postgresql.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.persistence.size }}
+{{- end }}
+{{- if .Values.rabbitmq.bundled }}
+{{- $name := include "pagerewind.component" (list . "rabbitmq") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "pagerewind.selector" (list . "rabbitmq") | nindent 4 }}
+  ports:
+    - name: amqp
+      port: {{ .Values.rabbitmq.port }}
+      targetPort: amqp
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.labels" . | nindent 4 }}
+    {{- include "pagerewind.selector" (list . "rabbitmq") | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pagerewind.selector" (list . "rabbitmq") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pagerewind.selector" (list . "rabbitmq") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      # No fsGroup: it would make the Erlang cookie group-readable, and RabbitMQ refuses to start then.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # A cookie left group-readable (for example by an fsGroup set earlier) stops RabbitMQ; fix it.
+        - name: cookie-permissions
+          image: {{ .Values.rabbitmq.image }}
+          command: ["sh", "-c", "if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then chmod 600 /var/lib/rabbitmq/.erlang.cookie; fi"]
+          securityContext:
+            {{- toYaml $dropAll | nindent 12 }}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 32Mi}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+      containers:
+        - name: rabbitmq
+          image: {{ .Values.rabbitmq.image }}
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: {{ .Values.rabbitmq.username | quote }}
+            {{- include "pagerewind.secretEnv" (list . "RABBITMQ_DEFAULT_PASS" "rabbitmq-password") | nindent 12 }}
+          ports:
+            - name: amqp
+              containerPort: 5672
+          securityContext:
+            {{- toYaml $dropAll | nindent 12 }}
+          resources:
+            {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "status"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.rabbitmq.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.rabbitmq.persistence.size }}
+{{- end }}
+{{- if .Values.redis.bundled }}
+{{- $name := include "pagerewind.component" (list . "redis") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "pagerewind.selector" (list . "redis") | nindent 4 }}
+  ports:
+    - name: redis
+      port: {{ .Values.redis.port }}
+      targetPort: redis
+---
+# Only rate-limit counters live here, so no persistence.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.labels" . | nindent 4 }}
+    {{- include "pagerewind.selector" (list . "redis") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pagerewind.selector" (list . "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pagerewind.selector" (list . "redis") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          args: ["--save", "", "--appendonly", "no"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          securityContext:
+            {{- toYaml (merge (dict "readOnlyRootFilesystem" true) $dropAll) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 20
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+{{- end }}
+{{- if .Values.mail.bundled }}
+{{- $name := include "pagerewind.component" (list . "mailpit") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "pagerewind.selector" (list . "mailpit") | nindent 4 }}
+  ports:
+    - name: smtp
+      port: {{ .Values.mail.port }}
+      targetPort: smtp
+    - name: http
+      port: 8025
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.labels" . | nindent 4 }}
+    {{- include "pagerewind.selector" (list . "mailpit") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pagerewind.selector" (list . "mailpit") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pagerewind.selector" (list . "mailpit") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mailpit
+          image: {{ .Values.mail.image }}
+          ports:
+            - name: smtp
+              containerPort: 1025
+            - name: http
+              containerPort: 8025
+          securityContext:
+            {{- toYaml (merge (dict "readOnlyRootFilesystem" true) $dropAll) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.mail.resources | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          # Mailpit keeps its message database in /tmp; the root filesystem is read-only.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

@@ -1,0 +1,110 @@
+{{- /*
+A development-mode Keycloak that imports the PageRewind realm at start. The realm file has placeholders
+(client secrets, the web address) that Keycloak fills from the environment. Data is kept in the pod only:
+users created by hand are lost when the pod restarts. Production: keycloak.bundled: false.
+*/ -}}
+{{- if .Values.keycloak.bundled }}
+{{- $name := include "pagerewind.component" (list . "keycloak") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-realm
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+data:
+  pagerewind-realm.json: |-
+    {{- .Files.Get "files/pagerewind-realm.json" | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "pagerewind.selector" (list . "keycloak") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "pagerewind.labels" . | nindent 4 }}
+    {{- include "pagerewind.selector" (list . "keycloak") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pagerewind.selector" (list . "keycloak") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pagerewind.selector" (list . "keycloak") | nindent 8 }}
+      annotations:
+        checksum/realm: {{ .Files.Get "files/pagerewind-realm.json" | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 0
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: keycloak
+          image: {{ .Values.keycloak.image }}
+          args: ["start-dev", "--import-realm"]
+          env:
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            {{- include "pagerewind.secretEnv" (list . "KC_BOOTSTRAP_ADMIN_PASSWORD" "keycloak-admin-password") | nindent 12 }}
+            # Tokens carry the public address; services inside the cluster may call the internal one.
+            - name: KC_HOSTNAME
+              value: {{ .Values.auth.issuer | trimSuffix "/realms/pagerewind" | quote }}
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            # Filled into the realm file at import.
+            - name: PAGEREWIND_URL
+              value: {{ .Values.publicUrl | quote }}
+            {{- include "pagerewind.secretEnv" (list . "PAGEREWIND_WEB_CLIENT_SECRET" "web-client-secret") | nindent 12 }}
+            {{- include "pagerewind.secretEnv" (list . "NOTIFY_CLIENT_SECRET" "notify-client-secret") | nindent 12 }}
+            {{- include "pagerewind.secretEnv" (list . "AUTOMATION_CLIENT_SECRET" "automation-client-secret") | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.keycloak.resources | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /health/started, port: management}
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /health/live, port: management}
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: {path: /health/ready, port: management}
+            periodSeconds: 10
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+      volumes:
+        - name: realm
+          configMap:
+            name: {{ $name }}-realm
+{{- end }}

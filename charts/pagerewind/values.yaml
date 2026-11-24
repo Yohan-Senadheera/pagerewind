@@ -1,0 +1,177 @@
+# Default values for the PageRewind chart.
+# The defaults install everything (data stores and a development Keycloak) for a local try-out on kind
+# with the hostnames *.localtest.me, which resolve to 127.0.0.1. See README.md.
+
+image:
+  registry: ghcr.io/yohan-senadheera
+  # Defaults to the chart's appVersion. "main" is the latest build of the main branch.
+  tag: ""
+  # Optional digest per service, for example {incident: "sha256:..."}. Pins the exact image.
+  digests: {}
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Where people open the web UI (the gateway). Used for login redirects.
+publicUrl: http://pagerewind.localtest.me
+
+auth:
+  # The realm as tokens and browsers see it (Keycloak's public address + /realms/pagerewind).
+  issuer: http://auth.localtest.me/realms/pagerewind
+  # The realm as the services reach it inside the cluster. Empty: the bundled Keycloak.
+  internalRealmUrl: ""
+
+secrets:
+  # Use your own Secret instead of the generated one. It needs the keys listed in README.md.
+  existingSecret: ""
+  # Values to set in the generated Secret. Anything left empty is generated once and kept on upgrade.
+  values:
+    postgres-password: ""
+    rabbitmq-password: ""
+    ingest-token: ""
+    action-link-secret: ""
+    web-client-secret: ""
+    notify-client-secret: ""
+    automation-client-secret: ""
+    keycloak-admin-password: ""
+    # Telegram is optional: leave the bot token empty to page by email only.
+    telegram-bot-token: ""
+    telegram-webhook-secret: ""
+
+# The Java services. Each can be scaled and sized; all run as non-root with a read-only root filesystem.
+services:
+  gateway:
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 256Mi}
+      limits: {memory: 384Mi}
+  ingest:
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 320Mi}
+      limits: {memory: 512Mi}
+  incident:
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 320Mi}
+      limits: {memory: 512Mi}
+  schedule:
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 320Mi}
+      limits: {memory: 512Mi}
+  notify:
+    replicas: 1
+    # Public address of notify, used in email action links and the Telegram webhook.
+    publicUrl: http://notify.localtest.me
+    emailFrom: pagerewind@localhost
+    resources:
+      requests: {cpu: 50m, memory: 320Mi}
+      limits: {memory: 512Mi}
+  status:
+    replicas: 1
+    title: System status
+    # Services always listed on the status page, even before their first incident.
+    services: []
+    resources:
+      requests: {cpu: 50m, memory: 320Mi}
+      limits: {memory: 512Mi}
+
+# The flight recorder: keeps recent logs of opted-in namespaces (label pagerewind.dev/record=true) and
+# records changes, then attaches them to incidents. Needs read-only access across the cluster.
+capture:
+  enabled: true
+  replicas: 1
+  # Memory budget for buffered log lines.
+  maxBufferSize: 128MB
+  rbac:
+    # Create the read-only ClusterRole and binding. Turn off to bind the service account yourself.
+    create: true
+  resources:
+    requests: {cpu: 50m, memory: 384Mi}
+    limits: {memory: 640Mi}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Data stores. "bundled: true" runs a single small instance in the release; for production, set
+# bundled: false and point at a managed or operator-run instance.
+postgresql:
+  bundled: true
+  image: postgres:17-alpine
+  host: ""
+  port: 5432
+  database: pagerewind
+  username: pagerewind
+  persistence:
+    size: 5Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+
+rabbitmq:
+  bundled: true
+  image: rabbitmq:4.1-alpine
+  host: ""
+  port: 5672
+  username: pagerewind
+  persistence:
+    size: 2Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+
+redis:
+  bundled: true
+  image: redis:7.4-alpine
+  host: ""
+  port: 6379
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+# Outgoing email. The bundled Mailpit catches all mail (web UI on port 8025) instead of sending it.
+mail:
+  bundled: true
+  image: axllent/mailpit:v1.20.0
+  host: ""
+  port: 1025
+  resources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {memory: 64Mi}
+
+# A development-mode Keycloak that imports the PageRewind realm (clients and roles, no users).
+# Its data lives in the pod and is lost on restart; use an operator-run Keycloak for production
+# (keycloak.bundled: false and auth.internalRealmUrl).
+keycloak:
+  bundled: true
+  image: quay.io/keycloak/keycloak:26.8.2
+  resources:
+    requests: {cpu: 100m, memory: 512Mi}
+    limits: {memory: 1Gi}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  # Leave a host empty to not expose that part.
+  hosts:
+    app: pagerewind.localtest.me
+    auth: auth.localtest.me
+    status: status.localtest.me
+    ingest: ingest.localtest.me
+    notify: notify.localtest.me
+  # For example: [{secretName: pagerewind-tls, hosts: [pagerewind.example.com]}]
+  tls: []

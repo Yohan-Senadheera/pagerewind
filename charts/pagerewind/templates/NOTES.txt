@@ -1,0 +1,40 @@
+PageRewind {{ .Chart.AppVersion }} is installed as "{{ .Release.Name }}" in namespace {{ .Release.Namespace }}.
+The Java services take one to two minutes to become ready:
+
+  kubectl -n {{ .Release.Namespace }} get pods -w
+
+{{- $secret := include "pagerewind.secretName" . }}
+{{- if .Values.ingress.enabled }}
+
+Open:
+  Web UI       {{ .Values.publicUrl }}
+{{- with .Values.ingress.hosts.status }}
+  Status page  http://{{ . }}/
+{{- end }}
+{{- with .Values.ingress.hosts.ingest }}
+  Alerts       http://{{ . }}/v1/alerts/alertmanager   (Alertmanager webhook)
+{{- end }}
+{{- end }}
+
+Send alerts with the ingest token:
+
+  kubectl -n {{ .Release.Namespace }} get secret {{ $secret }} -o jsonpath='{.data.ingest-token}' | base64 -d
+{{- if .Values.keycloak.bundled }}
+
+Create a login (the bundled Keycloak starts with no users; it forgets them when its pod restarts):
+
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "pagerewind.component" (list . "keycloak") }} -- sh -c '
+    /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master \
+      --user admin --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" &&
+    /opt/keycloak/bin/kcadm.sh create users -r pagerewind -s username=alice -s enabled=true \
+      -s firstName=Alice -s lastName=Responder -s email=alice@example.com -s emailVerified=true &&
+    /opt/keycloak/bin/kcadm.sh set-password -r pagerewind --username alice --new-password change-me-now &&
+    /opt/keycloak/bin/kcadm.sh add-roles -r pagerewind --uusername alice --rolename responder'
+
+Roles: viewer (read only), responder (acknowledge and resolve), admin (also schedules and settings).
+{{- end }}
+{{- if .Values.capture.enabled }}
+
+Flight recorder: label the namespaces it should record, for example
+  kubectl label namespace my-app pagerewind.dev/record=true
+{{- end }}

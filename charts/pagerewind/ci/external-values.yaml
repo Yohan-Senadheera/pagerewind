@@ -1,0 +1,50 @@
+# Rendering check for a production-style install: own data stores, own Keycloak, own Secret, TLS,
+# images pinned by digest, no capture RBAC. Not used for the kind install test.
+image:
+  tag: sha-41a4f5b
+  digests:
+    incident: sha256:aae0d0a0540c8184c44996afbe19518ab0415e666b8ae64180e93165f99badaa
+publicUrl: https://pagerewind.example.com
+auth:
+  issuer: https://auth.example.com/realms/pagerewind
+  internalRealmUrl: http://keycloak-service.keycloak.svc:8080/realms/pagerewind
+secrets:
+  existingSecret: pagerewind-secrets
+services:
+  notify:
+    publicUrl: https://notify.example.com
+    emailFrom: oncall@example.com
+  status:
+    title: Example status
+    services: [checkout, payments]
+capture:
+  rbac:
+    create: false
+postgresql:
+  bundled: false
+  host: pagerewind-db-rw.databases.svc
+rabbitmq:
+  bundled: false
+  host: rabbitmq.messaging.svc
+redis:
+  bundled: false
+  host: redis.cache.svc
+mail:
+  bundled: false
+  host: smtp.example.com
+  port: 587
+keycloak:
+  bundled: false
+ingress:
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    app: pagerewind.example.com
+    auth: ""
+    status: status.example.com
+    ingest: ingest.example.com
+    notify: notify.example.com
+  tls:
+    - secretName: pagerewind-tls
+      hosts: [pagerewind.example.com, status.example.com, ingest.example.com, notify.example.com]

@@ -1,0 +1,55 @@
+{{- if .Values.ingress.enabled }}
+{{- $root := . }}
+{{- $hosts := .Values.ingress.hosts }}
+{{- /* host key -> list of (path, pathType, component) */ -}}
+{{- $routes := dict
+  "app" (list (list "/" "Prefix" "gateway"))
+  "status" (list (list "/" "Exact" "status") (list "/v1/status" "Exact" "status"))
+  "ingest" (list (list "/v1/alerts" "Prefix" "ingest"))
+  "notify" (list (list "/v1/telegram/webhook" "Exact" "notify") (list "/v1/actions" "Prefix" "notify"))
+}}
+{{- if .Values.keycloak.bundled }}
+{{- /* Only the login pages and their assets; the admin console stays inside the cluster. */ -}}
+{{- $_ := set $routes "auth" (list (list "/realms/pagerewind/" "Prefix" "keycloak") (list "/resources/" "Prefix" "keycloak")) }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "pagerewind.fullname" . }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $key := list "app" "auth" "status" "ingest" "notify" }}
+    {{- $host := index $hosts $key | default "" }}
+    {{- if and $host (hasKey $routes $key) }}
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          {{- range $route := index $routes $key }}
+          - path: {{ index $route 0 }}
+            pathType: {{ index $route 1 }}
+            backend:
+              service:
+                name: {{ include "pagerewind.component" (list $root (index $route 2)) }}
+                port:
+                  {{- if eq (index $route 2) "keycloak" }}
+                  number: 8080
+                  {{- else }}
+                  number: 80
+                  {{- end }}
+          {{- end }}
+    {{- end }}
+    {{- end }}
+{{- end }}

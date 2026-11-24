@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pagerewind.component" (list . "config") }}
+  labels:
+    {{- include "pagerewind.instance" . | nindent 4 }}
+data:
+  SPRING_DATASOURCE_URL: {{ printf "jdbc:postgresql://%s:%v/%s" (include "pagerewind.postgresHost" .) .Values.postgresql.port .Values.postgresql.database | quote }}
+  SPRING_DATASOURCE_USERNAME: {{ .Values.postgresql.username | quote }}
+  SPRING_RABBITMQ_HOST: {{ include "pagerewind.rabbitmqHost" . | quote }}
+  SPRING_RABBITMQ_PORT: {{ .Values.rabbitmq.port | quote }}
+  SPRING_RABBITMQ_USERNAME: {{ .Values.rabbitmq.username | quote }}
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  # Tokens name Keycloak by its public address; the services fetch its keys inside the cluster.
+  PAGEREWIND_AUTH_ISSUER: {{ .Values.auth.issuer | quote }}
+  PAGEREWIND_AUTH_JWKS: {{ printf "%s/protocol/openid-connect/certs" (include "pagerewind.internalRealmUrl" .) | quote }}
