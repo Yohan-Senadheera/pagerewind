@@ -319,4 +319,11 @@ spec:
               port: http
             periodSeconds: 20
             failureThreshold: 3
+          # Mailpit keeps its message database in /tmp; the root filesystem is read-only.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}
