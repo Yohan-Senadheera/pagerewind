@@ -44,10 +44,18 @@ spec:
             ruleSelectorNilUsesHelmValues: false
             serviceMonitorSelectorNilUsesHelmValues: false
             podMonitorSelectorNilUsesHelmValues: false
+            # Keep off the server node: it also runs the control plane (the 24 Nov outage).
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                    - matchExpressions:
+                        - key: node-role.kubernetes.io/control-plane
+                          operator: DoesNotExist
             resources:
               requests:
                 cpu: 100m
-                memory: 512Mi
+                memory: 768Mi
               limits:
                 memory: 1536Mi
             storageSpec:
@@ -116,11 +124,18 @@ spec:
             existingSecret: grafana-admin
             userKey: admin-user
             passwordKey: admin-password
-          # Grafana 13 uses about 300 Mi after start; at 256 Mi it never finished starting.
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+          # Grafana 13 uses 300 to 650 Mi; at a 256 Mi limit it never finished starting.
           resources:
             requests:
               cpu: 20m
-              memory: 256Mi
+              memory: 512Mi
             limits:
               memory: 768Mi
 

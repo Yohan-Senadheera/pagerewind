@@ -1,5 +1,15 @@
 #!/bin/bash
 set -euo pipefail
+# Memory for k3s itself (API server, its database, kubelet: 2 to 3 GB on this node) is reserved, so the
+# scheduler does not count it as free for pods. Evict pods before the node runs out, instead of the
+# kernel thrashing with no swap (the 24 Nov outage).
+mkdir -p /etc/rancher/k3s
+cat > /etc/rancher/k3s/config.yaml <<'CONFIG'
+kubelet-arg:
+  - "kube-reserved=memory=2Gi"
+  - "system-reserved=memory=512Mi"
+  - "eviction-hard=memory.available<300Mi"
+CONFIG
 curl -sfL https://get.k3s.io | \
   K3S_TOKEN='${token}' \
   INSTALL_K3S_EXEC="server --node-name server --tls-san ${public_ip}" \
