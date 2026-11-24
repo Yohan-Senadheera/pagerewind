@@ -1,0 +1,35 @@
+# Alerts for PageRewind's own processing, behind the front door. Found by drill 1 (24 Nov 2026): with the
+# database down for 5 minutes, ingest kept answering 202, so the SLO alerts stayed quiet while nothing was
+# processed and 3 alerts ended in a dead-letter queue. These fire when accepted work cannot be handled.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pagerewind-pipeline
+spec:
+  groups:
+    - name: pagerewind-pipeline
+      rules:
+        - alert: PageRewindProcessingFailing
+          # Each service counts failed attempts to handle a queued message (alerts, pages, incident events).
+          expr: |
+            label_replace(
+              sum by (service) (increase({__name__=~"pagerewind_incident_alerts_failed_total|pagerewind_notify_pages_failed_total|pagerewind_schedule_events_failed_total", namespace="pagerewind"}[5m])),
+              "deployment", "$1", "service", "(.*)"
+            ) > 0
+          for: 1m
+          labels:
+            severity: critical
+            namespace: pagerewind
+          annotations:
+            summary: "{{ $labels.service }} cannot process queued messages ({{ $value | humanize }} failures in 5 minutes)"
+            description: >-
+              Accepted work is not being handled; messages retry and may end in a dead-letter queue.
+              Runbook: docs/runbooks/database-down.md (check the database first), then replay dead letters.
+        - alert: PageRewindServiceDown
+          expr: up{namespace="pagerewind", service=~"ingest|incident|schedule|notify"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            namespace: pagerewind
+          annotations:
+            summary: "{{ $labels.service }} is not answering metrics scrapes"

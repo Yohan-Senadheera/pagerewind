@@ -40,9 +40,28 @@ kubectl -n pagerewind describe pod postgres-0 | tail -20    # OOMKilled? disk fu
 - Check: `kubectl -n pagerewind logs deploy/incident --since=5m | grep -c "Incident opened"`; the
   delayed self-alert incident should be open with the evidence of the failing service attached.
 
+## Replay dead letters
+
+A message that fails 5 times (delivery limit 4) goes to `<queue>.dlq`. After the cause is fixed, check and move them back:
+
+```bash
+kubectl -n pagerewind exec rabbitmq-0 -- rabbitmqctl list_queues -q name messages | grep dlq
+kubectl -n pagerewind exec rabbitmq-0 -- rabbitmq-plugins enable rabbitmq_shovel
+kubectl -n pagerewind exec rabbitmq-0 -- rabbitmqctl set_parameter shovel replay-incident-alerts   '{"src-protocol":"amqp091","src-uri":"amqp://","src-queue":"incident.alerts.dlq","dest-protocol":"amqp091","dest-uri":"amqp://","dest-queue":"incident.alerts","src-delete-after":"queue-length"}'
+```
+
+The shovel moves what is in the queue at that moment and then deletes itself. Consumers are idempotent,
+so a replayed message that was already handled is counted once.
+
+## To simulate this outage
+
+A NetworkPolicy is not enough: pooled connections stay open, and in the Istio ambient mesh new ones ride
+existing ztunnel tunnels. Use an Istio AuthorizationPolicy (`action: DENY`, `rules: [{}]`, selector
+`app: postgres`) and close the open connections with `pg_terminate_backend`. Drill write-up:
+`docs/postmortems/2026-11-24-drill-database-unreachable.md`.
+
 ## Known gap
 
-PageRewind cannot page anyone about its own database while the database is down: its self-alerts go
-through its own ingest. The Watchdog (healthchecks.io) only fires if Alertmanager itself stops. To be
-paged *during* such an outage, critical self-alerts need a second route that does not depend on
-PageRewind (for example Alertmanager's own Telegram or email receiver).
+PageRewind cannot page through itself while its database is down. Since drill 1, critical alerts about
+PageRewind (`PageRewindProcessingFailing`, fast SLO burns) also go to healthchecks.io `/fail`, which emails
+at once without PageRewind.

@@ -29,10 +29,10 @@ EOF
 kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
 kubectl -n ingress-nginx wait --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=180s
 
-# 2. PageRewind (until v0.2.0 is released, use the latest main build).
+# 2. PageRewind 0.2.0 (the chart's default image tag).
 git clone https://github.com/Yohan-Senadheera/pagerewind && cd pagerewind
 helm install pagerewind charts/pagerewind -n pagerewind --create-namespace \
-  --set image.tag=main --set ingress.className=nginx --wait --timeout 15m
+  --set ingress.className=nginx --wait --timeout 15m
 ```
 
 The install prints how to create a login. Then open:

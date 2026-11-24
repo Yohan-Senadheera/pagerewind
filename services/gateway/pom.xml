@@ -16,7 +16,7 @@
 
     <groupId>dev.pagerewind</groupId>
     <artifactId>gateway</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0</version>
     <name>PageRewind gateway</name>
     <description>Signs people in with Keycloak, forwards their token to the services, and rate-limits public webhooks</description>
 

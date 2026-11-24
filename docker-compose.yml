@@ -31,7 +31,7 @@ x-service: &service
 
 services:
   gateway:
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-gateway:${PAGEREWIND_VERSION:-main}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-gateway:${PAGEREWIND_VERSION:-0.2.0}
     restart: unless-stopped
     mem_limit: 384m
     environment:
@@ -54,7 +54,7 @@ services:
 
   ingest:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-ingest:${PAGEREWIND_VERSION:-main}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-ingest:${PAGEREWIND_VERSION:-0.2.0}
     environment:
       <<: *service-env
       SPRING_DATA_REDIS_HOST: redis
@@ -69,19 +69,19 @@ services:
 
   incident:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-incident:${PAGEREWIND_VERSION:-main}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-incident:${PAGEREWIND_VERSION:-0.2.0}
     ports:
       - "127.0.0.1:8082:8080"
 
   schedule:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-schedule:${PAGEREWIND_VERSION:-main}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-schedule:${PAGEREWIND_VERSION:-0.2.0}
     ports:
       - "127.0.0.1:8083:8080"
 
   notify:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-notify:${PAGEREWIND_VERSION:-main}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-notify:${PAGEREWIND_VERSION:-0.2.0}
     environment:
       <<: *service-env
       INCIDENT_BASE_URL: http://incident:8080
@@ -99,7 +99,7 @@ services:
 
   status:
     <<: *service
-    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-status:${PAGEREWIND_VERSION:-main}
+    image: ${PAGEREWIND_REGISTRY:-ghcr.io/yohan-senadheera}/pagerewind-status:${PAGEREWIND_VERSION:-0.2.0}
     environment:
       <<: *service-env
       STATUS_PAGE_TITLE: Demo status
