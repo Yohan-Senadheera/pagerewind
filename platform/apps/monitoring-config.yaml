@@ -1,0 +1,26 @@
+# What Prometheus scrapes and alerts on for PageRewind: scrape targets, SLO rules and the secrets
+# Alertmanager and Grafana need. Separate from the stack so its CRDs exist first.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-config
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Yohan-Senadheera/pagerewind.git
+    targetRevision: main
+    path: platform/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s

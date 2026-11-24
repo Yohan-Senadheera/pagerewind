@@ -1,0 +1,157 @@
+# Prometheus, Alertmanager and Grafana (kube-prometheus-stack). Sized for the two-node cluster: one
+# replica each, 7 days or 3 GB of metrics. Rules, scrape targets and secrets are in platform/monitoring.
+#
+# Alert routing: SLO alerts and critical alerts go to PageRewind's own ingest, so PageRewind pages about
+# itself; the always-firing Watchdog goes to healthchecks.io, which pages by email when it stops arriving
+# (that covers the case where PageRewind or the whole cluster is down). Everything else is kept in
+# Alertmanager and Grafana without paging.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 93.9.0
+    helm:
+      valuesObject:
+        # k3s runs the scheduler, controller manager, proxy and etcd inside the k3s process; they cannot
+        # be scraped as separate targets, so their scrapers and alert rules would only report them down.
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        defaultRules:
+          rules:
+            etcd: false
+            kubeControllerManager: false
+            kubeSchedulerAlerting: false
+            kubeSchedulerRecording: false
+            kubeProxy: false
+
+        prometheus:
+          prometheusSpec:
+            retention: 7d
+            retentionSize: 3GB
+            # Pick up rules and monitors from any namespace, not only ones labelled for this release.
+            ruleSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 1536Mi
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 5Gi
+
+        alertmanager:
+          alertmanagerSpec:
+            # Mounted at /etc/alertmanager/secrets/alertmanager-pagerewind/<key>.
+            secrets: [alertmanager-pagerewind]
+            resources:
+              requests:
+                cpu: 10m
+                memory: 48Mi
+              limits:
+                memory: 128Mi
+          config:
+            global:
+              resolve_timeout: 5m
+            route:
+              receiver: "null"
+              group_by: [alertname, namespace, slo]
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 4h
+              routes:
+                - receiver: healthchecks
+                  matchers: ['alertname = "Watchdog"']
+                  group_wait: 0s
+                  group_interval: 1m
+                  repeat_interval: 1m
+                - receiver: "null"
+                  matchers: ['alertname = "InfoInhibitor"']
+                - receiver: pagerewind
+                  matchers: ['slo =~ ".+"']
+                - receiver: pagerewind
+                  matchers: ['severity = "critical"']
+            inhibit_rules:
+              # A critical alert silences the warning of the same name and namespace.
+              - source_matchers: ['severity = "critical"']
+                target_matchers: ['severity = "warning"']
+                equal: [alertname, namespace]
+            receivers:
+              - name: "null"
+              - name: pagerewind
+                webhook_configs:
+                  - url: http://ingest.pagerewind.svc/v1/alerts/alertmanager
+                    send_resolved: true
+                    http_config:
+                      authorization:
+                        type: Bearer
+                        credentials_file: /etc/alertmanager/secrets/alertmanager-pagerewind/ingest-token
+              - name: healthchecks
+                webhook_configs:
+                  - url_file: /etc/alertmanager/secrets/alertmanager-pagerewind/watchdog-url
+                    send_resolved: false
+
+        grafana:
+          # Admin login from AWS Secrets Manager (platform/monitoring/external-secret.yaml), not the
+          # chart's well-known default.
+          admin:
+            existingSecret: grafana-admin
+            userKey: admin-user
+            passwordKey: admin-password
+          resources:
+            requests:
+              cpu: 20m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+
+        prometheusOperator:
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+        kube-state-metrics:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 48Mi
+            limits:
+              memory: 128Mi
+        prometheus-node-exporter:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The CRDs are too large for client-side apply's last-applied annotation.
+      - ServerSideApply=true
