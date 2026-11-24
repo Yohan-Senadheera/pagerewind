@@ -75,9 +75,6 @@ spec:
               value: "PageRewind demo status"
             - name: STATUS_SERVICES
               value: "checkout,payments"
-            # Rollback drill (docs/runbooks/canary-release.md): a bad release. Revert after the drill.
-            - name: PAGEREWIND_STATUS_FAULT_PERCENT
-              value: "50"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
