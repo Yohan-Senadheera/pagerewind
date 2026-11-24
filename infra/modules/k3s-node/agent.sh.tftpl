@@ -1,5 +1,12 @@
 #!/bin/bash
 set -euo pipefail
+# Leave room for the OS and k3s agent, and evict pods before the node runs out of memory.
+mkdir -p /etc/rancher/k3s
+cat > /etc/rancher/k3s/config.yaml <<'CONFIG'
+kubelet-arg:
+  - "system-reserved=memory=768Mi"
+  - "eviction-hard=memory.available<300Mi"
+CONFIG
 curl -sfL https://get.k3s.io | \
   K3S_URL='https://${server_ip}:6443' \
   K3S_TOKEN='${token}' \

@@ -94,7 +94,9 @@ resource "aws_instance" "server" {
   }
 
   lifecycle {
-    ignore_changes = [ami]
+    # user_data only runs at first boot. Ignoring changes keeps an edited install script from
+    # replacing a running node; the script applies on the next rebuild ("down" then "up").
+    ignore_changes = [ami, user_data]
   }
 
   tags = { Name = "${var.name}-server" }
@@ -134,7 +136,9 @@ resource "aws_instance" "agent" {
   }
 
   lifecycle {
-    ignore_changes = [ami]
+    # user_data only runs at first boot. Ignoring changes keeps an edited install script from
+    # replacing a running node; the script applies on the next rebuild ("down" then "up").
+    ignore_changes = [ami, user_data]
   }
 
   depends_on = [aws_instance.server]
