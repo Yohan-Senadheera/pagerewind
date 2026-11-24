@@ -116,12 +116,13 @@ spec:
             existingSecret: grafana-admin
             userKey: admin-user
             passwordKey: admin-password
+          # Grafana 13 uses about 300 Mi after start; at 256 Mi it never finished starting.
           resources:
             requests:
               cpu: 20m
-              memory: 128Mi
-            limits:
               memory: 256Mi
+            limits:
+              memory: 768Mi
 
         prometheusOperator:
           resources:
