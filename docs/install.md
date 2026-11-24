@@ -15,6 +15,8 @@ hostnames that need no DNS setup), production values with your own data stores a
 secret keys and every setting are in the
 [chart README](https://github.com/Yohan-Senadheera/pagerewind/blob/main/charts/pagerewind/README.md).
 
+Next: [Getting started](getting-started.md) sets up your team, rotation, email, Telegram and Alertmanager.
+
 ## Docker Compose
 
 No flight recorder (it needs Kubernetes). Needs Docker with Compose and about 4 GB of free memory.

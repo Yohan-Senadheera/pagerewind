@@ -25,6 +25,7 @@ even of pods that already crashed and were deleted, and the recent changes, with
 ## Where to go next
 
 - **[Install](install.md)** with Helm (everything bundled, works on kind) or Docker Compose.
+- **[Getting started](getting-started.md)**: your team, rotation, email, Telegram and Alertmanager, step by step.
 - **[Architecture](architecture.md)**: services, events, the flight recorder and the reference deployment.
 - **Runbooks** for operating it, starting with [the database is unreachable](runbooks/database-down.md).
 - **Failure drills**: what happened when the database, a node and Keycloak failed on the reference cluster,
