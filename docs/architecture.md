@@ -233,4 +233,4 @@ flowchart LR
 - **Backups:** pg_dump to S3 every 6 hours (the cluster cannot delete them); a weekly restore test.
 - Planned, not built: preview environments per pull request, logs and traces (Loki, Tempo).
 
-Runbooks: [runbooks/](runbooks/). Drill write-ups: [postmortems/](postmortems/).
+Runbooks and drill write-ups: see the [documentation index](index.md#where-to-go-next).

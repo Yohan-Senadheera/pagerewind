@@ -3,7 +3,7 @@
 | Topic | Where |
 |---|---|
 | Architecture (product and reference deployment) | [architecture.md](architecture.md) |
-| Design decisions | [adr/](adr/) |
+| Design decisions | [adr/](adr/0001-record-architecture-decisions.md) |
 | Install with Helm (kind quickstart, production values, verifying images) | [../charts/pagerewind/README.md](../charts/pagerewind/README.md) |
 | Security: what the flight recorder may read | [security/capture-rbac.md](security/capture-rbac.md) |
 

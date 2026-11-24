@@ -1,0 +1,75 @@
+site_name: PageRewind
+site_description: On-call that pages you, then rewinds what your pods did before they died.
+site_url: https://yohan-senadheera.github.io/pagerewind/
+repo_url: https://github.com/Yohan-Senadheera/pagerewind
+repo_name: Yohan-Senadheera/pagerewind
+edit_uri: edit/main/docs/
+copyright: Apache License 2.0
+
+docs_dir: docs
+# docs/README.md is the folder index for GitHub; the site's home page is docs/index.md.
+exclude_docs: |
+  README.md
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+
+markdown_extensions:
+  - tables
+  - admonition
+  - attr_list
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Architecture: architecture.md
+  - Security:
+      - Flight recorder access: security/capture-rbac.md
+  - Runbooks:
+      - Database unreachable: runbooks/database-down.md
+      - Node failure: runbooks/node-failure.md
+      - Keycloak down: runbooks/keycloak-down.md
+      - Canary releases: runbooks/canary-release.md
+  - Failure drills:
+      - Database unreachable: postmortems/2026-11-24-drill-database-unreachable.md
+      - Node failure: postmortems/2026-11-24-drill-node-failure.md
+      - Keycloak down: postmortems/2026-11-24-drill-keycloak-down.md
+  - Decisions (ADRs):
+      - 1. Record decisions: adr/0001-record-architecture-decisions.md
+      - 2. Java microservices: adr/0002-java-spring-boot-microservices.md
+      - 3. k3s on one node: adr/0003-k3s-on-one-ec2-node.md
+      - 4. Two free-plan nodes: adr/0004-two-free-plan-nodes.md
+      - 5. Outbox and idempotent consumers: adr/0005-outbox-and-idempotent-consumers.md
+      - 6. Shared messaging library: adr/0006-shared-messaging-library.md
+      - 7. CI without AWS credentials: adr/0007-ci-without-aws-credentials.md
+      - 8. GitOps app of apps: adr/0008-gitops-app-of-apps.md
+      - 9. Keycloak and gateway: adr/0009-keycloak-and-gateway.md
+      - 10. mTLS with Istio ambient: adr/0010-mtls-with-istio-ambient.md
+      - 11. Signed images, digest pinning: adr/0011-signed-images-and-digest-pinning.md
+      - 12. SLOs and self-alerting: adr/0012-slos-and-self-alerting.md
