@@ -1,0 +1,77 @@
+# Service level objectives for PageRewind, with multi-window burn-rate alerts (the Google SRE workbook
+# method). Burn rate = how fast the error budget is being used: 1 means it lasts exactly the 30-day window.
+#   fast burn: 14.4x over 1 h and 5 min -> 2% of the month's budget gone in an hour -> page (critical)
+#   slow burn:  6x   over 6 h and 30 min -> 5% gone in six hours                    -> warning
+# The long window proves it is real, the short window that it is still happening (so it resolves fast).
+# Both alerts carry an "slo" label; Alertmanager sends them into PageRewind's ingest.
+#
+# SLO 1, page delivery: 99% of page deliveries (Telegram, email) succeed.
+# SLO 2, alert intake: 99.5% of alert webhook requests are accepted without a server error.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pagerewind-slos
+spec:
+  groups:
+    - name: slo-page-delivery.rules
+      rules:
+        - record: slo:page_delivery:error_ratio_rate5m
+          expr: sum(rate(pagerewind_notify_deliveries_total{outcome="failed"}[5m])) / sum(rate(pagerewind_notify_deliveries_total[5m]))
+        - record: slo:page_delivery:error_ratio_rate30m
+          expr: sum(rate(pagerewind_notify_deliveries_total{outcome="failed"}[30m])) / sum(rate(pagerewind_notify_deliveries_total[30m]))
+        - record: slo:page_delivery:error_ratio_rate1h
+          expr: sum(rate(pagerewind_notify_deliveries_total{outcome="failed"}[1h])) / sum(rate(pagerewind_notify_deliveries_total[1h]))
+        - record: slo:page_delivery:error_ratio_rate6h
+          expr: sum(rate(pagerewind_notify_deliveries_total{outcome="failed"}[6h])) / sum(rate(pagerewind_notify_deliveries_total[6h]))
+
+    - name: slo-alert-intake.rules
+      rules:
+        - record: slo:alert_intake:error_ratio_rate5m
+          expr: sum(rate(http_server_requests_seconds_count{service="ingest", uri=~"/v1/alerts/.*", status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{service="ingest", uri=~"/v1/alerts/.*"}[5m]))
+        - record: slo:alert_intake:error_ratio_rate30m
+          expr: sum(rate(http_server_requests_seconds_count{service="ingest", uri=~"/v1/alerts/.*", status=~"5.."}[30m])) / sum(rate(http_server_requests_seconds_count{service="ingest", uri=~"/v1/alerts/.*"}[30m]))
+        - record: slo:alert_intake:error_ratio_rate1h
+          expr: sum(rate(http_server_requests_seconds_count{service="ingest", uri=~"/v1/alerts/.*", status=~"5.."}[1h])) / sum(rate(http_server_requests_seconds_count{service="ingest", uri=~"/v1/alerts/.*"}[1h]))
+        - record: slo:alert_intake:error_ratio_rate6h
+          expr: sum(rate(http_server_requests_seconds_count{service="ingest", uri=~"/v1/alerts/.*", status=~"5.."}[6h])) / sum(rate(http_server_requests_seconds_count{service="ingest", uri=~"/v1/alerts/.*"}[6h]))
+
+    - name: slo-alerts
+      rules:
+        - alert: PageDeliveryBudgetBurnFast
+          expr: slo:page_delivery:error_ratio_rate1h > (14.4 * 0.01) and slo:page_delivery:error_ratio_rate5m > (14.4 * 0.01)
+          for: 2m
+          labels:
+            severity: critical
+            slo: page-delivery
+            service: pagerewind-notify
+          annotations:
+            summary: "Pages are failing: {{ $value | humanizePercentage }} of deliveries failed (SLO 99%)"
+            description: The page delivery error budget is burning 14x too fast. Check notify's logs, Telegram and SMTP.
+        - alert: PageDeliveryBudgetBurnSlow
+          expr: slo:page_delivery:error_ratio_rate6h > (6 * 0.01) and slo:page_delivery:error_ratio_rate30m > (6 * 0.01)
+          for: 15m
+          labels:
+            severity: warning
+            slo: page-delivery
+            service: pagerewind-notify
+          annotations:
+            summary: "Page deliveries failing more than budgeted: {{ $value | humanizePercentage }} (SLO 99%)"
+        - alert: AlertIntakeBudgetBurnFast
+          expr: slo:alert_intake:error_ratio_rate1h > (14.4 * 0.005) and slo:alert_intake:error_ratio_rate5m > (14.4 * 0.005)
+          for: 2m
+          labels:
+            severity: critical
+            slo: alert-intake
+            service: pagerewind-ingest
+          annotations:
+            summary: "Alert intake failing: {{ $value | humanizePercentage }} of webhooks got a server error (SLO 99.5%)"
+            description: Alert senders are being refused. Check ingest, RabbitMQ and Redis.
+        - alert: AlertIntakeBudgetBurnSlow
+          expr: slo:alert_intake:error_ratio_rate6h > (6 * 0.005) and slo:alert_intake:error_ratio_rate30m > (6 * 0.005)
+          for: 15m
+          labels:
+            severity: warning
+            slo: alert-intake
+            service: pagerewind-ingest
+          annotations:
+            summary: "Alert intake errors above budget: {{ $value | humanizePercentage }} (SLO 99.5%)"

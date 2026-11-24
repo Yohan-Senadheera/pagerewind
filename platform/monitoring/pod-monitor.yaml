@@ -1,0 +1,21 @@
+# Scrape every PageRewind service's Spring Boot metrics. The pods' "app" label becomes the "service"
+# label of each series (gateway, ingest, incident, ...).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: pagerewind
+spec:
+  namespaceSelector:
+    matchNames: [pagerewind]
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [gateway, ingest, incident, schedule, notify, status, capture]
+  podMetricsEndpoints:
+    - portNumber: 8080
+      path: /actuator/prometheus
+      interval: 30s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_app]
+          targetLabel: service
