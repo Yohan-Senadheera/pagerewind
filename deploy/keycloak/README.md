@@ -2,7 +2,13 @@
 
 `pagerewind-realm.json` is the `pagerewind` realm as code: the roles, the clients and the service
 accounts. It holds no secrets and no people. Keycloak fills in these placeholders from its environment
-when it imports the file:
+when it imports the file.
+
+The same file is used by the Compose quickstart (mounted into Keycloak), the Helm chart (a copy in
+`charts/pagerewind/files/`, CI checks it matches) and the reference cluster (`scripts/render-realm-import.py`
+turns it into `platform/keycloak/realm-import.yaml`, CI checks that too).
+
+Placeholders:
 
 | Placeholder | What it is |
 |---|---|
