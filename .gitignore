@@ -46,3 +46,6 @@ backend.hcl
 
 # Local settings
 .env
+
+# MkDocs build output
+site/
