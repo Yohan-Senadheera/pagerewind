@@ -23,3 +23,5 @@ spec:
     managedNamespaceMetadata:
       labels:
         istio.io/dataplane-mode: ambient
+        # The flight recorder (capture) keeps recent logs of PageRewind's own pods for its self-alerts.
+        pagerewind.dev/record: "true"

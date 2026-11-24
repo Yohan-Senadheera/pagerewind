@@ -44,6 +44,9 @@ spec:
             severity: critical
             slo: page-delivery
             service: pagerewind-notify
+            # Lets the flight recorder attach this workload's recent logs and changes.
+            namespace: pagerewind
+            deployment: notify
           annotations:
             summary: "Pages are failing: {{ $value | humanizePercentage }} of deliveries failed (SLO 99%)"
             description: The page delivery error budget is burning 14x too fast. Check notify's logs, Telegram and SMTP.
@@ -54,6 +57,9 @@ spec:
             severity: warning
             slo: page-delivery
             service: pagerewind-notify
+            # Lets the flight recorder attach this workload's recent logs and changes.
+            namespace: pagerewind
+            deployment: notify
           annotations:
             summary: "Page deliveries failing more than budgeted: {{ $value | humanizePercentage }} (SLO 99%)"
         - alert: AlertIntakeBudgetBurnFast
@@ -63,6 +69,8 @@ spec:
             severity: critical
             slo: alert-intake
             service: pagerewind-ingest
+            namespace: pagerewind
+            deployment: ingest
           annotations:
             summary: "Alert intake failing: {{ $value | humanizePercentage }} of webhooks got a server error (SLO 99.5%)"
             description: Alert senders are being refused. Check ingest, RabbitMQ and Redis.
@@ -73,5 +81,7 @@ spec:
             severity: warning
             slo: alert-intake
             service: pagerewind-ingest
+            namespace: pagerewind
+            deployment: ingest
           annotations:
             summary: "Alert intake errors above budget: {{ $value | humanizePercentage }} (SLO 99.5%)"
