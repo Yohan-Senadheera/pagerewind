@@ -20,7 +20,9 @@ failed node; only the external Watchdog (healthchecks.io) could notice.
 | 21:44 to 21:48 | Pods on `agent` still counted as running: Kubernetes waits 5 minutes before evicting them |
 | 21:49:44 | Pods evicted; Traefik and the services without volumes start on `server`; the public site answers again; 36 pods not running |
 | 21:49 to 21:58 | Pods with volumes on `agent` (RabbitMQ, Keycloak's database, Prometheus) cannot move and wait |
+| **21:51:56** | **healthchecks.io marks the Watchdog DOWN and emails** (no ping since Alertmanager stopped with the node): the only alarm, 8.8 minutes after the failure |
 | 21:58:20 | `agent` started |
+| 21:59:26 | Watchdog ping arrives again; healthchecks.io emails UP ("downtime lasted 7 minutes, 30 seconds") |
 | 21:59:27 | Node `Ready`; all pods running |
 | 22:12 | Real test alert: incident opened, Telegram and email pages sent |
 
@@ -36,14 +38,14 @@ failed node; only the external Watchdog (healthchecks.io) could notice.
    `tolerationSeconds: 300` for unreachable nodes) and the only ingress controller was on the failed node.
 2. **Single points of failure on one node:** RabbitMQ, Keycloak's database and Prometheus/Alertmanager
    all have one instance with a node-local volume, so they could not move.
-3. **No alarm from inside the cluster**: Alertmanager was on the failed node. Only the healthchecks.io
-   Watchdog (pings stopped at 21:43) could notice.
+3. **No alarm from inside the cluster**: Alertmanager was on the failed node. The healthchecks.io Watchdog
+   noticed and emailed after 8.8 minutes, as designed; that delay is the check's period plus grace.
 
 ## Actions
 
 | Action | Status |
 |---|---|
-| Watchdog to healthchecks.io as the outside alarm for this case | In place (period 5 min + grace 10 min) |
+| Watchdog to healthchecks.io as the outside alarm for this case | Proven: DOWN email at 21:51:56, UP at 21:59:26. A shorter period and grace would page sooner |
 | Ingress and CoreDNS with two replicas spread over both nodes, or shorter eviction wait for them | Open |
 | Spread single-instance stateful parts over both nodes (or accept and document the blast radius) | Open; accepted for a two-node demo cluster |
 | Replicated storage or a second RabbitMQ / database replica | Open; needs more than two small nodes |
