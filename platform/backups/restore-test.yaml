@@ -1,0 +1,102 @@
+# Restore test: takes the newest backup from S3, restores it into a throw-away PostgreSQL inside this
+# pod (never the live database), and prints row counts of the main tables next to the live ones.
+# It fails if the restore fails or a table is empty in the backup but not in the live database.
+# Weekly, and on demand:
+#   kubectl -n backups create job --from=cronjob/restore-test restore-now
+#   kubectl -n backups logs -f job/restore-now -c restore
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restore-test
+spec:
+  schedule: "45 12 * * 0"
+  timeZone: Asia/Colombo
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app: restore-test
+        spec:
+          restartPolicy: Never
+          hostNetwork: true
+          dnsPolicy: ClusterFirstWithHostNet
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: download
+              image: amazon/aws-cli:2.42.2
+              command: ["sh", "-c"]
+              args:
+                - >-
+                  key=$(aws s3 ls "s3://$BUCKET/pagerewind/" --recursive | sort | tail -1 | awk '{print $4}') &&
+                  [ -n "$key" ] && echo "newest backup: $key" &&
+                  aws s3 cp "s3://$BUCKET/$key" /work/pagerewind.dump --only-show-errors &&
+                  echo "$key" > /work/key
+              env:
+                - {name: AWS_REGION, value: ap-southeast-2}
+                - {name: HOME, value: /tmp}
+              envFrom:
+                - secretRef:
+                    name: backup
+              securityContext: &restricted
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {memory: 256Mi}
+              volumeMounts:
+                - {name: work, mountPath: /work}
+                - {name: tmp, mountPath: /tmp}
+          containers:
+            - name: restore
+              image: postgres:17-alpine
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -e
+                  export PGDATA=/scratch/data
+                  initdb -U restore --auth=trust > /dev/null
+                  pg_ctl -o "-c listen_addresses='' -k /scratch" -w start > /dev/null
+                  createdb -h /scratch -U restore pagerewind
+                  pg_restore -h /scratch -U restore -d pagerewind --no-owner --exit-on-error /work/pagerewind.dump
+                  echo "restored $(cat /work/key)"
+                  tables="incident.incident incident.incident_event schedule.person schedule.team notify.delivery status.status_incident capture.evidence"
+                  failed=0
+                  printf '%-26s %10s %10s\n' table restored live
+                  for t in $tables; do
+                    restored=$(psql -h /scratch -U restore -d pagerewind -Atc "select count(*) from $t")
+                    live=$(psql -h postgres.pagerewind.svc -U pagerewind -d pagerewind -Atc "select count(*) from $t")
+                    printf '%-26s %10s %10s\n' "$t" "$restored" "$live"
+                    if [ "$restored" -eq 0 ] && [ "$live" -gt 0 ]; then failed=1; fi
+                  done
+                  pg_ctl -m fast stop > /dev/null
+                  [ "$failed" -eq 0 ] && echo "RESTORE TEST PASSED" || { echo "RESTORE TEST FAILED"; exit 1; }
+              envFrom:
+                - secretRef:
+                    name: backup
+              securityContext: *restricted
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {memory: 512Mi}
+              volumeMounts:
+                - {name: work, mountPath: /work}
+                - {name: scratch, mountPath: /scratch}
+                - {name: run, mountPath: /var/run/postgresql}
+          volumes:
+            - {name: work, emptyDir: {}}
+            - {name: tmp, emptyDir: {}}
+            - {name: scratch, emptyDir: {}}
+            - {name: run, emptyDir: {}}
