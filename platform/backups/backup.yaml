@@ -1,0 +1,83 @@
+# Every 6 hours while the cluster runs (it is stopped most nights): pg_dump of the PageRewind database,
+# uploaded to S3 as s3://<bucket>/pagerewind/<UTC date>/pagerewind-<UTC time>.dump (custom format,
+# compressed). Run one now with:
+#   kubectl -n backups create job --from=cronjob/database-backup backup-now
+#
+# Why host network: S3 access uses the node's IAM role through the instance metadata service, which
+# pods cannot reach (hop limit 1, on purpose). Like External Secrets, only this namespace's jobs use
+# the host network; it is outside the Kyverno policy scope and runs nothing else.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: database-backup
+spec:
+  schedule: "15 */6 * * *"
+  timeZone: Asia/Colombo
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app: database-backup
+        spec:
+          restartPolicy: Never
+          hostNetwork: true
+          dnsPolicy: ClusterFirstWithHostNet
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: dump
+              image: postgres:17-alpine
+              command: ["sh", "-c"]
+              args:
+                - >-
+                  pg_dump -h postgres.pagerewind.svc -U pagerewind -d pagerewind -Fc -Z 6 -f /work/pagerewind.dump &&
+                  pg_restore --list /work/pagerewind.dump > /dev/null &&
+                  echo "dump ok: $(wc -c < /work/pagerewind.dump) bytes"
+              envFrom:
+                - secretRef:
+                    name: backup
+              securityContext: &restricted
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources: &small
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {memory: 256Mi}
+              volumeMounts:
+                - {name: work, mountPath: /work}
+          containers:
+            - name: upload
+              image: amazon/aws-cli:2.42.2
+              command: ["sh", "-c"]
+              args:
+                - >-
+                  key="pagerewind/$(date -u +%Y-%m-%d)/pagerewind-$(date -u +%H%M%S).dump" &&
+                  aws s3 cp /work/pagerewind.dump "s3://$BUCKET/$key" --only-show-errors &&
+                  echo "uploaded s3://$BUCKET/$key"
+              env:
+                - {name: AWS_REGION, value: ap-southeast-2}
+                - {name: HOME, value: /tmp}
+              envFrom:
+                - secretRef:
+                    name: backup
+              securityContext: *restricted
+              resources: *small
+              volumeMounts:
+                - {name: work, mountPath: /work}
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - {name: work, emptyDir: {}}
+            - {name: tmp, emptyDir: {}}

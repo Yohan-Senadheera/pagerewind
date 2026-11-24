@@ -17,3 +17,6 @@ output "agent_instance_id" {
 output "ssh_command" {
   value = "ssh -i ~/.ssh/pagerewind ubuntu@${var.public_ip}"
 }
+output "node_role_name" {
+  value = aws_iam_role.node.name
+}

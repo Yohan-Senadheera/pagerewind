@@ -1,0 +1,21 @@
+# Database backups to S3 and a restore test (platform/backups).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backups
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Yohan-Senadheera/pagerewind.git
+    targetRevision: main
+    path: platform/backups
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backups
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
