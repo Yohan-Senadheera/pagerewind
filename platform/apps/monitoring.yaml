@@ -93,6 +93,11 @@ spec:
                   repeat_interval: 1m
                 - receiver: "null"
                   matchers: ['alertname = "InfoInhibitor"']
+                # Critical alerts about PageRewind itself also go straight to healthchecks.io (/fail emails at
+                # once), because PageRewind may be the thing that is broken (drill 1, 24 Nov 2026).
+                - receiver: healthchecks-fail
+                  matchers: ['namespace = "pagerewind"', 'severity = "critical"']
+                  continue: true
                 - receiver: pagerewind
                   matchers: ['slo =~ ".+"']
                 - receiver: pagerewind
@@ -115,6 +120,10 @@ spec:
               - name: healthchecks
                 webhook_configs:
                   - url_file: /etc/alertmanager/secrets/alertmanager-pagerewind/watchdog-url
+                    send_resolved: false
+              - name: healthchecks-fail
+                webhook_configs:
+                  - url_file: /etc/alertmanager/secrets/alertmanager-pagerewind/watchdog-fail-url
                     send_resolved: false
 
         grafana:
