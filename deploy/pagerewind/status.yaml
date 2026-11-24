@@ -9,12 +9,35 @@ spec:
     - port: 80
       targetPort: 8080
 ---
-apiVersion: apps/v1
-kind: Deployment
+# A canary release: a new version first gets one of the two pods; Prometheus then checks the error rate
+# of that pod for two minutes (platform/rollouts/analysis-templates.yaml). Above 5% the rollout aborts
+# and the old version takes all traffic again, with no human action.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: status
 spec:
-  replicas: 1
+  replicas: 2
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  progressDeadlineAbort: true
+  strategy:
+    canary:
+      abortScaleDownDelaySeconds: 30
+      steps:
+        - setWeight: 50
+        - pause: {duration: 30s}
+        - analysis:
+            templates:
+              - templateName: http-error-rate
+                clusterScope: true
+            args:
+              - name: service
+                value: status
+              - name: canary-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
+        - setWeight: 100
   selector:
     matchLabels:
       app: status

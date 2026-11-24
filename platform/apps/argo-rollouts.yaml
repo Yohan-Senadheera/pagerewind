@@ -1,0 +1,59 @@
+# Argo Rollouts: canary releases with automatic analysis and rollback. The analysis templates are in
+# platform/rollouts (separate app, so the CRDs exist first).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-rollouts
+    targetRevision: 2.43.12
+    helm:
+      valuesObject:
+        controller:
+          replicas: 1
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          metrics:
+            enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-rollouts
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rollouts-config
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Yohan-Senadheera/pagerewind.git
+    targetRevision: main
+    path: platform/rollouts
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
