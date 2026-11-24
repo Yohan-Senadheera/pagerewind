@@ -19,3 +19,6 @@ spec:
       relabelings:
         - sourceLabels: [__meta_kubernetes_pod_label_app]
           targetLabel: service
+        # Rollouts label each version's pods with its template hash; canary analysis filters on it.
+        - sourceLabels: [__meta_kubernetes_pod_label_rollouts_pod_template_hash]
+          targetLabel: pod_template_hash
