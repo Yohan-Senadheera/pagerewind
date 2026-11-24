@@ -88,7 +88,7 @@ flowchart LR
 | `capture` | Flight recorder and "what changed" |
 
 Java 21, Spring Boot 4, Keycloak, PostgreSQL (one schema per service), RabbitMQ (quorum queues),
-Redis. Architecture: [docs/architecture.md](docs/architecture.md); decisions: [docs/adr/](docs/adr/).
+Redis. Architecture: [docs/architecture.md](docs/architecture.md); decisions: [docs/adr/](docs/adr/). Docs site: https://yohan-senadheera.github.io/pagerewind/
 
 ## How it is tested
 
