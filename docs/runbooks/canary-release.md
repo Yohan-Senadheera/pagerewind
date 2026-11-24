@@ -20,12 +20,12 @@ kubectl -n pagerewind describe analysisrun <name>     # each measurement and its
 ```
 
 The status page gets little traffic, so measurements can be empty (counted as 0% errors). For a test,
-send traffic while the canary runs:
+send traffic while the canary runs. Run it in the default namespace: the pagerewind namespace's
+policies require probes and limits, which a throw-away load pod does not need.
 
 ```bash
-kubectl -n pagerewind run load --rm -i --restart=Never --image=curlimages/curl:8.17.0 \
-  --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":100}}}' -- \
-  sh -c 'for i in $(seq 1 1500); do curl -s -o /dev/null http://status/v1/status; sleep 0.2; done'
+kubectl -n default run load --rm -i --restart=Never --image=curlimages/curl:8.17.0 -- \
+  sh -c 'for i in $(seq 1 1500); do curl -s -o /dev/null http://status.pagerewind.svc/v1/status; sleep 0.2; done'
 ```
 
 ## Rehearse a bad release
