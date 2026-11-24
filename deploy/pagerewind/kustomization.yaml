@@ -22,16 +22,16 @@ resources:
 # One build for every PageRewind image, pinned by digest. Set by scripts/pin-images.sh in the deploy pull request.
 images:
   - name: ghcr.io/yohan-senadheera/pagerewind-gateway
-    newTag: sha-e29a182@sha256:253471125894dab38b3a9808780c76268885bb781ea4682739e258d1898be12c
+    newTag: sha-6fe5b06@sha256:324e49ef3ad13ff872e98b959673b9b0b15722fd487dfcb61e20a6587e8c7a5a
   - name: ghcr.io/yohan-senadheera/pagerewind-ingest
-    newTag: sha-e29a182@sha256:77dcb14f7995e270612f0b402f3b73fd218a3f2a1374f0bdf5c8ab534332aef1
+    newTag: sha-6fe5b06@sha256:073e9564b1df66d98f720e883ee53157a3f60146ce42d04dc5d7453e18dd1e54
   - name: ghcr.io/yohan-senadheera/pagerewind-incident
-    newTag: sha-e29a182@sha256:0f558535bd5efd8117568ac079627d212d8eb747d0f68781b4699d593493ae75
+    newTag: sha-6fe5b06@sha256:f266f5b6f40c11515b67bfa912e9534e45c8e4884ed69a051a697b251c9a239a
   - name: ghcr.io/yohan-senadheera/pagerewind-schedule
-    newTag: sha-e29a182@sha256:989ed00e067e74a5a967729299d98ea66f5ebc4dcaabdb50d789e7b7f39a4ec9
+    newTag: sha-6fe5b06@sha256:368ffa94cd71851c5af4f8ba530d56bd2399d5b3aaa94b94fa1ddfaf5a610f13
   - name: ghcr.io/yohan-senadheera/pagerewind-notify
-    newTag: sha-e29a182@sha256:b23146bfc81cab2fb0dcc2f955bb1a92f99a90972cbc68dfd7e62065e3144cea
+    newTag: sha-6fe5b06@sha256:64cfa1021cf6ab9fd9e30733b60f0b0efeadd2b479db4fc879baaab8fd814b77
   - name: ghcr.io/yohan-senadheera/pagerewind-status
-    newTag: sha-e29a182@sha256:b5673ca6db661592da34dc2b7b22a84590de255d3e431c0974c07f0fbfff402e
+    newTag: sha-6fe5b06@sha256:6a89ed0a827a3fbe76dd36a8afac03622b4ba04ef5071323254b68c548fc2972
   - name: ghcr.io/yohan-senadheera/pagerewind-capture
-    newTag: sha-e29a182@sha256:3a04271f32ba65494e07f7a5dfaac1485be1893ef8583cbc9217fa460d0880c4
+    newTag: sha-6fe5b06@sha256:4822b970b4d0e42323197e3c606d4dc77967acc4c0c4d839881fd89c71731c2e
