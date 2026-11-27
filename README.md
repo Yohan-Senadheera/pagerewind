@@ -14,8 +14,10 @@ nobody acknowledges, the page escalates. Its **flight recorder** attaches the la
 workload (even of pods that already crashed and were deleted) and the recent changes, with the most
 likely cause, to the incident.
 
-**Live demo:** [status.pagerewind.dev](https://status.pagerewind.dev), the public status page of the
-reference deployment on AWS. The cluster is stopped between demo sessions to save cost.
+**Demo:** [3-minute video](https://youtu.be/7NzK9PC7FjE) of a page, a crash and the evidence it keeps.
+
+**Live:** [status.pagerewind.dev](https://status.pagerewind.dev), the public status page of the reference
+deployment on AWS. It runs only during demo sessions, to keep costs down.
 
 ## Try it
 
